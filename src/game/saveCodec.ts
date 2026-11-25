@@ -55,7 +55,7 @@ export async function decryptSave<T>(code: string, passphrase: string): Promise<
     const decrypted = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: new Uint8Array(fromBase64Url(ivText)).buffer },
       key,
-      fromBase64Url(dataText)
+      new Uint8Array(fromBase64Url(dataText)).buffer
     );
     return JSON.parse(new TextDecoder().decode(decrypted)) as T;
   } catch {
