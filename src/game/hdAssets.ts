@@ -71,8 +71,7 @@ function buildCompressedAsset(
   out.height = targetH;
   const octx = out.getContext('2d');
   if (octx) {
-    octx.imageSmoothingEnabled = true;
-    octx.imageSmoothingQuality = 'high';
+    octx.imageSmoothingEnabled = false;
     octx.drawImage(quarter, 0, 0, targetW, targetH);
   }
 
