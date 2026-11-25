@@ -3,8 +3,8 @@ const PBKDF2_ITERATIONS = 120_000;
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = '';
+  bytes.forEach((byte) => (binary += String.fromCharCode(byte)));
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
 }
 
 function fromBase64Url(value: string): Uint8Array {
@@ -53,7 +53,7 @@ export async function decryptSave<T>(code: string, passphrase: string): Promise<
   try {
     const key = await deriveKey(passphrase, fromBase64Url(saltText));
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromBase64Url(ivText).buffer },
+      { name: 'AES-GCM', iv: new Uint8Array(fromBase64Url(ivText)).buffer },
       key,
       fromBase64Url(dataText)
     );
