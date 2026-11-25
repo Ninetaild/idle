@@ -26,6 +26,7 @@ import {
   rollSnowflakeDrop,
   selectAutoOrPriorityTarget,
   sellPillsToMerchant,
+  sellHerbsToMerchant,
   STOMACHACHE_DURATION_SEC,
 } from './logic';
 import type { WorldEntity } from './types';
@@ -126,6 +127,14 @@ test('merchant buys elixirs and dud pills for gold', () => {
   const afterDud = sellPillsToMerchant(afterElixir.stats, afterElixir.inventory, 'dudPill', 3);
   assert.equal(afterDud.stats.gold, stats.gold + 60);
   assert.equal(afterDud.inventory.dudPills, 0);
+});
+
+test('merchant buys field herbs at the listed field-resource price', () => {
+  const stats = createInitialStats();
+  const inv = { ...createInitialInventory(), herbs: 4 };
+  const sold = sellHerbsToMerchant(stats, inv, 3);
+  assert.equal(sold.stats.gold, stats.gold + 36);
+  assert.equal(sold.inventory.herbs, 1);
 });
 
 test('new field events (injured, bandit, lost fox, ancient stone, peddler) resolve properly', () => {
