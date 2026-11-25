@@ -21,7 +21,7 @@ export const ECONOMY_PRICES = {
   dudPillSell: 5,
   baseEnhanceCost: 60,
   enhanceCostMultiplier: 1.2,
-  winterMikoSnowflakes: 5,
+  winterMikoSnowflakes: 500,
 } as const;
 
 export const STOMACHACHE_DURATION_SEC = 10;
