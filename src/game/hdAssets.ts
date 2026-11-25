@@ -4,6 +4,42 @@ export const ASSET_MASTER_WIDTH = 1024;
 export const ASSET_MASTER_HEIGHT = 720;
 
 const assetCache = new Map<string, HTMLCanvasElement>();
+const svgAtlasImages = new Map<string, { image: HTMLImageElement; ready: boolean }>();
+
+function getSvgAtlasFrame(
+  path: string,
+  frameW: number,
+  frameH: number,
+  col: number,
+  row: number,
+  outW = frameW,
+  outH = frameH
+): HTMLCanvasElement | null {
+  if (typeof Image === 'undefined') return null;
+  let entry = svgAtlasImages.get(path);
+  if (!entry) {
+    const image = new Image();
+    entry = { image, ready: false };
+    image.onload = () => { entry!.ready = true; };
+    image.src = `${import.meta.env.BASE_URL}${path}`;
+    svgAtlasImages.set(path, entry);
+  }
+  if (!entry.ready) return null;
+  const key = `svg:${path}:${col}:${row}:${outW}:${outH}`;
+  const cached = assetCache.get(key);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(entry.image, col * frameW, row * frameH, frameW, frameH, 0, 0, outW, outH);
+  }
+  assetCache.set(key, canvas);
+  return canvas;
+}
+
 
 let scratchMaster: HTMLCanvasElement | null = null;
 let scratchHalf: HTMLCanvasElement | null = null;
@@ -175,6 +211,17 @@ export type MapTileKind =
   | 'tree_snow';
 
 export function getMapTileAsset(kind: MapTileKind, variant = 0): HTMLCanvasElement {
+  const tileIndex: Record<MapTileKind, number> = {
+    village_courtyard: 0, village_stone: 6, village_grass: 8,
+    forest_moss: 1, plains_meadow: 2, river_shore: 3,
+    river_water: 4, snowy_ground: 5, tree_green: 11, tree_snow: 10,
+  };
+  const atlasIndex = tileIndex[kind];
+  const atlasTile = getSvgAtlasFrame(
+    'assets/sprites/field_tiles_atlas.svg', 128, 90,
+    atlasIndex % 4, Math.floor(atlasIndex / 4), 128, 90
+  );
+  if (atlasTile) return atlasTile;
   const v = variant % 4;
   const key = `tile1024_${kind}_${v}`;
 
@@ -586,6 +633,23 @@ export function getEntityAsset(
   kind: string,
   revealedBandit = false
 ): HTMLCanvasElement {
+  const enemyIndex: Record<string, number> = {
+    yokai_dokkaebi: 0, fairy_sylph: 1, yokai_gumiho: 2,
+    yokai_tengu: 3, yokai_kappa: 4, yokai_yukionna: 5,
+  };
+  if (kind in enemyIndex) {
+    const enemy = getSvgAtlasFrame(
+      'assets/sprites/enemy_atlas.svg', 96, 96, enemyIndex[kind], 0, 128, 90
+    );
+    if (enemy) return enemy;
+  }
+  const propIndex: Record<string, number> = { herb: 0, berry: 1 };
+  if (kind in propIndex) {
+    const prop = getSvgAtlasFrame(
+      'assets/sprites/field_props_atlas.svg', 96, 96, propIndex[kind], 0, 96, 68
+    );
+    if (prop) return prop;
+  }
   const key = `ent1024_${kind}_${revealedBandit ? 1 : 0}`;
   const isGatherable = kind === 'herb' || kind === 'berry';
   const outW = isGatherable ? 96 : 128;
@@ -920,28 +984,22 @@ export function getEntityAsset(
   });
 }
 
-let foxMikoImage: HTMLImageElement | null = null;
-let foxMikoCanvas: HTMLCanvasElement | null = null;
-let foxMikoReady = false;
 
-/** Pixel-art fox shrine maiden portrait based on the supplied reference. */
+/** Main character frame from the committed 4x4 sprite atlas. */
 export function getFoxMikoAsset(): HTMLCanvasElement {
-  if (foxMikoReady && foxMikoCanvas) return foxMikoCanvas;
-  if (typeof Image !== 'undefined' && !foxMikoImage) {
-    foxMikoImage = new Image();
-    foxMikoImage.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 96;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(foxMikoImage!, 0, 0, 64, 96);
-        foxMikoCanvas = canvas;
-        foxMikoReady = true;
-      }
-    };
-    foxMikoImage.src = `${import.meta.env.BASE_URL}assets/fox_miko_pixel.png`;
-  }
-  return getMikoAsset('down', 'idle', 0, 'default');
+  return getSvgAtlasFrame('assets/sprites/protagonist_atlas.svg', 64, 96, 0, 0, 64, 96)
+    ?? getMikoAsset('down', 'idle', 0, 'default');
+}
+
+/** Event skin frame from the committed winter-accented 4x4 sprite atlas. */
+export function getEventMikoAsset(
+  dir: Direction,
+  action: ActorAction,
+  walkPhase: number
+): HTMLCanvasElement {
+  const row: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
+  const col = action === 'walk' ? (Math.floor(walkPhase) % 2) + 1 : action === 'pickup' || action === 'hurt' ? 3 : 0;
+  return getSvgAtlasFrame(
+    'assets/sprites/event_protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96
+  ) ?? getMikoAsset(dir, action, walkPhase, 'winter_miko');
 }
