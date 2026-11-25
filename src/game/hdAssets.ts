@@ -920,3 +920,29 @@ export function getEntityAsset(
     }
   });
 }
+
+let foxMikoImage: HTMLImageElement | null = null;
+let foxMikoCanvas: HTMLCanvasElement | null = null;
+let foxMikoReady = false;
+
+/** Pixel-art fox shrine maiden portrait based on the supplied reference. */
+export function getFoxMikoAsset(): HTMLCanvasElement {
+  if (foxMikoReady && foxMikoCanvas) return foxMikoCanvas;
+  if (typeof Image !== 'undefined' && !foxMikoImage) {
+    foxMikoImage = new Image();
+    foxMikoImage.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(foxMikoImage!, 0, 0, 64, 96);
+        foxMikoCanvas = canvas;
+        foxMikoReady = true;
+      }
+    };
+    foxMikoImage.src = '/assets/fox_miko_pixel.png';
+  }
+  return getMikoAsset('down', 'idle', 0, 'default');
+}
