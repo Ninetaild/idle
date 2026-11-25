@@ -16,6 +16,7 @@ interface VillageModalsProps {
   onCraftOne: () => void;
   onCraftBatch: () => void;
   onSellItem: (item: 'elixir' | 'dudPill', qty: number) => void;
+  onSellHerbs: (qty: number) => void;
   onEnhanceCharm: () => void;
   onBuyWinterSkin: () => void;
   onEquipSkin: (skin: MikoSkinId) => void;
@@ -56,6 +57,7 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
   onCraftOne,
   onCraftBatch,
   onSellItem,
+  onSellHerbs,
   onEnhanceCharm,
   onBuyWinterSkin,
   onEquipSkin,
@@ -303,6 +305,31 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                   {lastResultText}
                 </div>
               )}
+
+              <div className="flex items-center justify-between gap-2 py-2 px-3 bg-[#241b18] border border-[#4a3728] rounded-xs">
+                <div>
+                  <div className="font-bold text-[#86efac]">필드 약초</div>
+                  <div className="text-xs text-[#d9c5a0] font-mono-num">개당 {ECONOMY_PRICES.herbSell}엽전</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={inventory.herbs < 1}
+                    onClick={() => onSellHerbs(1)}
+                    className="shrine-button px-2.5 py-1.5 text-xs font-bold bg-[#3b2d26] hover:bg-[#4e3b31] disabled:opacity-40 border border-[#6b4f3a] rounded-xs cursor-pointer"
+                  >
+                    1개 판매
+                  </button>
+                  <button
+                    type="button"
+                    disabled={inventory.herbs < 1}
+                    onClick={() => onSellHerbs(inventory.herbs)}
+                    className="shrine-button px-2.5 py-1.5 text-xs font-bold bg-[#24543e] hover:bg-[#2e6a4e] disabled:opacity-40 border border-[#4ade80] rounded-xs cursor-pointer"
+                  >
+                    전체 판매
+                  </button>
+                </div>
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2 py-2 px-3 bg-[#241b18] border border-[#4a3728] rounded-xs">
