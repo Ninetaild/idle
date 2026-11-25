@@ -40,6 +40,16 @@ export const PauseModal: React.FC<PauseModalProps> = ({
     }
   };
 
+  const handleCopy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('이 브라우저에서는 클립보드 복사를 지원하지 않습니다.');
+      await navigator.clipboard.writeText(saveCode);
+      setSaveMessage('저장 코드를 클립보드에 복사했습니다.');
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : '복사하지 못했습니다. 코드를 직접 선택해 복사해 주세요.');
+    }
+  };
+
   const handleImport = async () => {
     if (!saveCode.trim()) {
       setSaveMessage('불러올 저장 코드를 입력해 주세요.');
@@ -66,7 +76,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
       aria-modal="true"
       aria-label="일시정지 메뉴"
     >
-      <div className="shrine-panel rounded-md w-full max-w-md p-5 text-[#fbf8f1]">
+      <div className="shrine-panel rounded-md w-full max-w-md p-5 text-[#fbf8f1] max-h-[92vh] overflow-y-auto">
         <h2 className="font-display text-2xl font-bold text-[#fde68a]">
           잠시 쉬어가기
         </h2>
@@ -133,6 +143,14 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             spellCheck={false}
             className="w-full resize-y px-3 py-2 text-[10px] leading-relaxed font-mono bg-[#241b18] border border-[#6b4f3a] rounded-xs text-[#e0f2fe] outline-none focus:border-[#38bdf8] select-text"
           />
+          <button
+            type="button"
+            disabled={!saveCode.trim()}
+            onClick={handleCopy}
+            className="shrine-button w-full py-2 text-xs font-bold bg-[#263a50] hover:bg-[#304b66] disabled:opacity-40 border border-[#64748b] rounded-xs cursor-pointer"
+          >
+            저장 코드 복사
+          </button>
           <button
             type="button"
             disabled={busy || passphrase.trim().length < 8 || !saveCode.trim()}
