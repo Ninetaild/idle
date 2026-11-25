@@ -18,6 +18,7 @@ import {
   FIELD_METADATA,
   purchaseWinterMikoSkin,
   sellPillsToMerchant,
+  sellHerbsToMerchant,
 } from './game/logic';
 import { soundEngine } from './game/sound';
 import { decryptSave, encryptSave } from './game/saveCodec';
@@ -263,6 +264,16 @@ export default function App() {
     if (outcome.code === 1) soundEngine.playCoin();
   };
 
+  const handleSellHerbs = (qty: number) => {
+    const outcome = sellHerbsToMerchant(stats, inventory, qty);
+    setStats(outcome.stats);
+    setInventory(outcome.inventory);
+    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
+    setStationResultText(outcome.message);
+    pushLog(outcome.message, outcome.tone);
+    if (outcome.code === 1) soundEngine.playCoin();
+  };
+
   const handleEnhanceCharm = () => {
     const outcome = attemptEnhanceCharm(stats, inventory);
     setStats(outcome.stats);
@@ -416,6 +427,7 @@ export default function App() {
         onCraftOne={handleCraftOne}
         onCraftBatch={handleCraftBatch}
         onSellItem={handleSellItem}
+        onSellHerbs={handleSellHerbs}
         onEnhanceCharm={handleEnhanceCharm}
         onBuyWinterSkin={handleBuyWinterSkin}
         onEquipSkin={handleEquipSkin}
