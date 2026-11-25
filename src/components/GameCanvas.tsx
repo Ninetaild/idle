@@ -3,6 +3,7 @@ import {
   getEntityAsset,
   getMapTileAsset,
   getMikoAsset,
+  getFoxMikoAsset,
   type MapTileKind,
 } from '../game/hdAssets';
 import {
@@ -1571,14 +1572,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.globalAlpha = 0.65;
           }
 
-          const spr = getMikoAsset(
-            p.dir,
-            p.action,
-            p.walkPhase,
-            sim.stats.equippedSkin
-          );
-          const drawW = 76;
-          const drawH = 54;
+          const spr =
+            sim.stats.equippedSkin === 'default'
+              ? getFoxMikoAsset()
+              : getMikoAsset(p.dir, p.action, p.walkPhase, sim.stats.equippedSkin);
+          const drawW = sim.stats.equippedSkin === 'default' ? 48 : 76;
+          const drawH = sim.stats.equippedSkin === 'default' ? 72 : 54;
           const bob =
             p.action === 'walk'
               ? Math.abs(Math.sin(p.walkPhase * Math.PI)) * -2.5
