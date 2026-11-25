@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { PlayerStats } from '../game/types';
 
 interface PauseModalProps {
@@ -7,6 +7,8 @@ interface PauseModalProps {
   onResume: () => void;
   onReturnTitle: () => void;
   onResetSave: () => void;
+  onExportSave: (passphrase: string) => Promise<string>;
+  onImportSave: (code: string, passphrase: string) => Promise<void>;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -15,7 +17,46 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onResume,
   onReturnTitle,
   onResetSave,
+  onExportSave,
+  onImportSave,
 }) => {
+
+  const [passphrase, setPassphrase] = useState('');
+  const [saveCode, setSaveCode] = useState('');
+  const [saveMessage, setSaveMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleExport = async () => {
+    setBusy(true);
+    setSaveMessage('');
+    try {
+      const code = await onExportSave(passphrase);
+      setSaveCode(code);
+      setSaveMessage('암호화된 저장 코드가 생성되었습니다. 코드를 복사해 안전한 곳에 보관하세요.');
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : '저장 코드 생성에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!saveCode.trim()) {
+      setSaveMessage('불러올 저장 코드를 입력해 주세요.');
+      return;
+    }
+    setBusy(true);
+    setSaveMessage('');
+    try {
+      await onImportSave(saveCode, passphrase);
+      setSaveMessage('저장 데이터를 불러왔습니다.');
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : '저장 데이터를 불러오지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -60,6 +101,48 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             · 이벤트 상점: 눈 쌓인 숲에서 얻은 눈송이로 겨울 무녀 스킨을 해금할 수 있습니다.
           </div>
         </div>
+
+
+        <section className="mt-4 p-3 bg-[#140f0e] border border-[#38bdf8]/50 rounded-xs space-y-2">
+          <div className="font-bold text-sm text-[#bae6fd]">암호화된 저장 코드</div>
+          <p className="text-[11px] text-[#d9c5a0] leading-relaxed">
+            암호를 설정해 현재 진행 상황을 코드로 내보내거나, 기존 코드를 불러올 수 있습니다.
+            암호는 저장 코드와 별도로 기억해 주세요. 8자 이상을 사용하세요.
+          </p>
+          <input
+            type="password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            placeholder="저장 코드 암호 (8자 이상)"
+            autoComplete="new-password"
+            className="w-full px-3 py-2 text-xs bg-[#241b18] border border-[#6b4f3a] rounded-xs text-[#fbf8f1] outline-none focus:border-[#38bdf8]"
+          />
+          <button
+            type="button"
+            disabled={busy || passphrase.trim().length < 8}
+            onClick={handleExport}
+            className="shrine-button w-full py-2 text-xs font-bold bg-[#1e4b66] hover:bg-[#285f80] disabled:opacity-40 border border-[#38bdf8] rounded-xs cursor-pointer"
+          >
+            {busy ? '처리 중...' : '현재 진행 상황 내보내기'}
+          </button>
+          <textarea
+            value={saveCode}
+            onChange={(event) => setSaveCode(event.target.value)}
+            placeholder="내보낸 코드가 여기에 표시됩니다. 불러올 때는 저장 코드를 붙여 넣으세요."
+            rows={3}
+            spellCheck={false}
+            className="w-full resize-y px-3 py-2 text-[10px] leading-relaxed font-mono bg-[#241b18] border border-[#6b4f3a] rounded-xs text-[#e0f2fe] outline-none focus:border-[#38bdf8] select-text"
+          />
+          <button
+            type="button"
+            disabled={busy || passphrase.trim().length < 8 || !saveCode.trim()}
+            onClick={handleImport}
+            className="shrine-button w-full py-2 text-xs font-bold bg-[#24543e] hover:bg-[#2e6a4e] disabled:opacity-40 border border-[#4ade80] rounded-xs cursor-pointer"
+          >
+            저장 코드 불러오기
+          </button>
+          {saveMessage && <p role="status" className="text-[11px] text-[#bae6fd] leading-relaxed">{saveMessage}</p>}
+        </section>
 
         <div className="mt-5 flex flex-col gap-2">
           <button
