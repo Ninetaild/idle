@@ -116,9 +116,9 @@ export const YOKAI_SPECIES_TABLE: readonly WeightedEntry<1 | 2 | 3 | 4 | 5 | 6>[
  * Snowy Forest Snowflake Drop Table
  */
 export const SNOWFLAKE_DROP_TABLE: readonly WeightedEntry<1 | 2 | 3>[] = [
-  { code: 1, text: '반짝이는 눈송이를 주웠다! (눈송이 +1)', per: 0.2 },
-  { code: 2, text: '결정처럼 영롱한 큰 눈송이 두 개를 얻었다! (눈송이 +2)', per: 0.06 },
-  { code: 3, text: '', per: 0.74 },
+  { code: 1, text: '반짝이는 눈송이를 주웠다! (눈송이 +1)', per: 0.008 },
+  { code: 2, text: '결정처럼 영롱한 큰 눈송이 두 개를 얻었다! (눈송이 +2)', per: 0.002 },
+  { code: 3, text: '', per: 0.99 },
 ];
 
 /**
