@@ -159,15 +159,15 @@ test('open vs event fields and snowflake drop + winter miko skin shop work clean
   const normalDrop = rollSnowflakeDrop('forest', inv, () => 0.01);
   assert.equal(normalDrop.gained, 0);
 
-  const snowDrop = rollSnowflakeDrop('snowy_forest', inv, () => 0.1);
+  const snowDrop = rollSnowflakeDrop('snowy_forest', inv, () => 0.001);
   assert.equal(snowDrop.gained, 1);
   assert.equal(snowDrop.inventory.snowflakes, 1);
 
   const stats = createInitialStats();
-  const richInv = { ...inv, snowflakes: 6 };
+  const richInv = { ...inv, snowflakes: 500 };
   const unlocked = purchaseWinterMikoSkin(stats, richInv);
   assert.equal(unlocked.code, 1);
-  assert.equal(unlocked.inventory.snowflakes, 1);
+  assert.equal(unlocked.inventory.snowflakes, 0);
   assert.equal(unlocked.stats.equippedSkin, 'winter_miko');
 
   const swappedBack = equipMikoSkin(unlocked.stats, 'default');
