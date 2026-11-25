@@ -1320,8 +1320,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.save();
       ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingEnabled = false;
 
       const shakeMag = sim.camera.trauma * sim.camera.trauma * 6;
       const shakeX = shakeMag > 0.1 ? Math.round((Math.random() - 0.5) * 2 * shakeMag) : 0;
@@ -1697,7 +1696,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       <canvas
         ref={canvasRef}
         data-testid="game-canvas"
-        className="w-full h-full hd-game-canvas cursor-crosshair"
+        className="w-full h-full hd-game-canvas cursor-crosshair [image-rendering:pixelated]"
       />
     </div>
   );
