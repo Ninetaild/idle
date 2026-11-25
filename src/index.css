@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Hahmlet', serif;
+    --font-sans: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #1a1412;
+    color: #f5ebd6;
+    font-family: var(--font-sans);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-game-canvas {
+  display: block;
+}
+
+/* World-matched dark cedar + warm parchment frame */
+.shrine-panel {
+  background-color: rgba(28, 21, 18, 0.92);
+  border: 2px solid #6b4f3a;
+  box-shadow:
+    inset 0 0 0 1px rgba(229, 198, 135, 0.14),
+    0 6px 20px rgba(0, 0, 0, 0.55);
+}
+
+.shrine-button {
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), background-color 120ms ease, border-color 120ms ease;
+}
+
+.shrine-button:active:not(:disabled) {
+  transform: translateY(1px);
+}

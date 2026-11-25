@@ -1,0 +1,6 @@
+{
+  "name": "무녀의 약초 산책",
+  "description": "2D 버드아이 뷰 픽셀 아트 무녀 방치형 약초 채집·연단·탐험 웹 게임",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

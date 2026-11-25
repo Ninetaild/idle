@@ -1,0 +1,232 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  ALCHEMY_TABLE,
+  ANCIENT_STONE_TABLE,
+  BERRY_EFFECT_TABLE,
+  FIELD_EVENT_TABLE,
+  FIELD_SPAWN_TABLE,
+  getEnhancePool,
+  HERB_GATHER_TABLE,
+  rollWeighted,
+  SNOWFLAKE_DROP_TABLE,
+} from './probability';
+import { computePixelViewport, screenToWorld } from './viewport';
+import {
+  attemptEnhanceCharm,
+  craftElixirFromHerb,
+  createInitialInventory,
+  createInitialStats,
+  eatFieldBerry,
+  equipMikoSkin,
+  FIELD_METADATA,
+  gatherFieldHerb,
+  purchaseWinterMikoSkin,
+  resolveFieldEvent,
+  rollSnowflakeDrop,
+  selectAutoOrPriorityTarget,
+  sellPillsToMerchant,
+  STOMACHACHE_DURATION_SEC,
+} from './logic';
+import type { WorldEntity } from './types';
+
+test('weighted tables match specified probabilities accurately', () => {
+  assert.equal(rollWeighted(FIELD_SPAWN_TABLE, () => 0.0).code, 1);
+  assert.equal(rollWeighted(FIELD_SPAWN_TABLE, () => 0.4).code, 2);
+  assert.equal(rollWeighted(FIELD_SPAWN_TABLE, () => 0.8).code, 3);
+  assert.equal(rollWeighted(FIELD_SPAWN_TABLE, () => 0.95).code, 4);
+
+  assert.equal(rollWeighted(ALCHEMY_TABLE, () => 0.4).code, 1);
+  assert.equal(rollWeighted(ALCHEMY_TABLE, () => 0.7).code, 2);
+  assert.equal(rollWeighted(ALCHEMY_TABLE, () => 0.95).code, 3);
+
+  assert.equal(rollWeighted(HERB_GATHER_TABLE, () => 0.2).code, 1);
+  assert.equal(rollWeighted(HERB_GATHER_TABLE, () => 0.7).code, 2);
+  assert.equal(rollWeighted(HERB_GATHER_TABLE, () => 0.95).code, 3);
+
+  assert.equal(rollWeighted(BERRY_EFFECT_TABLE, () => 0.1).code, 1);
+  assert.equal(rollWeighted(BERRY_EFFECT_TABLE, () => 0.3).code, 2);
+  assert.equal(rollWeighted(BERRY_EFFECT_TABLE, () => 0.6).code, 3);
+  assert.equal(rollWeighted(BERRY_EFFECT_TABLE, () => 0.8).code, 4);
+  assert.equal(rollWeighted(BERRY_EFFECT_TABLE, () => 0.95).code, 5);
+
+  assert.equal(rollWeighted(FIELD_EVENT_TABLE, () => 0.1).code, 1);
+  assert.equal(rollWeighted(FIELD_EVENT_TABLE, () => 0.4).code, 2);
+  assert.equal(rollWeighted(FIELD_EVENT_TABLE, () => 0.6).code, 3);
+  assert.equal(rollWeighted(FIELD_EVENT_TABLE, () => 0.8).code, 4);
+  assert.equal(rollWeighted(FIELD_EVENT_TABLE, () => 0.95).code, 5);
+
+  assert.equal(rollWeighted(ANCIENT_STONE_TABLE, () => 0.2).code, 1);
+  assert.equal(rollWeighted(ANCIENT_STONE_TABLE, () => 0.6).code, 2);
+  assert.equal(rollWeighted(ANCIENT_STONE_TABLE, () => 0.9).code, 3);
+
+  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.1).code, 1);
+  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.23).code, 2);
+  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.5).code, 3);
+});
+
+test('charm enhancement scales cost by 1.2x and draws from stage success/maintain/downgrade pool', () => {
+  let stats = { ...createInitialStats(), gold: 500 }; // cost starts at 60
+  const inv = createInitialInventory();
+
+  // Level 0: success -> level +1, cost * 1.2 = 72
+  const step1 = attemptEnhanceCharm(stats, inv, () => 0.1);
+  assert.equal(step1.code, 'success');
+  assert.equal(step1.stats.enhanceLevel, 1);
+  assert.equal(step1.stats.enhanceCost, 72);
+  assert.equal(step1.stats.gold, 440);
+
+  // Level 1 pool: check weights sum cleanly to 1
+  const pool1 = getEnhancePool(1);
+  const sum = pool1.reduce((acc, e) => acc + e.per, 0);
+  assert.ok(Math.abs(sum - 1) < 0.01);
+
+  // Level 1: maintain -> level stays 1, cost * 1.2 = 86
+  const step2 = attemptEnhanceCharm(step1.stats, inv, () => 0.78);
+  assert.equal(step2.code, 'maintain');
+  assert.equal(step2.stats.enhanceLevel, 1);
+  assert.equal(step2.stats.enhanceCost, 86);
+
+  // Level 1: downgrade -> level drops to 0, cost * 1.2 = 103
+  const step3 = attemptEnhanceCharm(step2.stats, inv, () => 0.95);
+  assert.equal(step3.code, 'downgrade');
+  assert.equal(step3.stats.enhanceLevel, 0);
+  assert.equal(step3.stats.enhanceCost, 103);
+});
+
+test('tiered herb gathering, berry eating, and alchemy outcomes apply accurately', () => {
+  const stats = { ...createInitialStats(), hp: 50 };
+  const inv = createInitialInventory(); // 3 herbs, 1 elixir
+
+  const herbRare = gatherFieldHerb(stats, inv, () => 0.95);
+  assert.equal(herbRare.inventory.herbs, 6);
+  assert.equal(herbRare.stats.hp, 55);
+
+  assert.equal(STOMACHACHE_DURATION_SEC, 10);
+  const berryStomach = eatFieldBerry(stats, inv, () => 0.05);
+  assert.equal(berryStomach.stats.stomachacheTimer, 10);
+
+  const berryGolden = eatFieldBerry(stats, inv, () => 0.95);
+  assert.equal(berryGolden.stats.hp, 85);
+  assert.equal(berryGolden.stats.gold, stats.gold + 15);
+
+  const alchemyGreat = craftElixirFromHerb(stats, inv, () => 0.95);
+  assert.equal(alchemyGreat.inventory.herbs, 2);
+  assert.equal(alchemyGreat.inventory.elixirs, 3);
+});
+
+test('merchant buys elixirs and dud pills for gold', () => {
+  const stats = createInitialStats();
+  const inv = { herbs: 0, berries: 0, elixirs: 2, dudPills: 3, snowflakes: 0 };
+
+  const afterElixir = sellPillsToMerchant(stats, inv, 'elixir', 1);
+  assert.equal(afterElixir.stats.gold, stats.gold + 45);
+  assert.equal(afterElixir.inventory.elixirs, 1);
+
+  const afterDud = sellPillsToMerchant(afterElixir.stats, afterElixir.inventory, 'dudPill', 3);
+  assert.equal(afterDud.stats.gold, stats.gold + 60);
+  assert.equal(afterDud.inventory.dudPills, 0);
+});
+
+test('new field events (injured, bandit, lost fox, ancient stone, peddler) resolve properly', () => {
+  const stats = createInitialStats();
+  const inv = createInitialInventory();
+
+  const fox = resolveFieldEvent(stats, inv, 3);
+  assert.equal(fox.triggerCombat, false);
+  assert.equal(fox.stats.goodDeeds, 1);
+  assert.equal(fox.inventory.elixirs, 2);
+
+  const stoneBless = resolveFieldEvent({ ...stats, hp: 60 }, inv, 4, () => 0.1);
+  assert.equal(stoneBless.stats.maxHp, 105);
+  assert.equal(stoneBless.stats.hp, 85);
+
+  const peddler = resolveFieldEvent(stats, inv, 5);
+  assert.equal(peddler.inventory.herbs, inv.herbs + 2);
+  assert.equal(peddler.stats.gold, stats.gold + 18);
+
+  const bandit = resolveFieldEvent(stats, inv, 2);
+  assert.equal(bandit.triggerCombat, true);
+});
+
+test('open vs event fields and snowflake drop + winter miko skin shop work cleanly', () => {
+  assert.equal(FIELD_METADATA.forest.category, 'open');
+  assert.equal(FIELD_METADATA.plains.category, 'open');
+  assert.equal(FIELD_METADATA.river.category, 'open');
+  assert.equal(FIELD_METADATA.snowy_forest.category, 'event');
+
+  const inv = createInitialInventory();
+  const normalDrop = rollSnowflakeDrop('forest', inv, () => 0.01);
+  assert.equal(normalDrop.gained, 0);
+
+  const snowDrop = rollSnowflakeDrop('snowy_forest', inv, () => 0.1);
+  assert.equal(snowDrop.gained, 1);
+  assert.equal(snowDrop.inventory.snowflakes, 1);
+
+  const stats = createInitialStats();
+  const richInv = { ...inv, snowflakes: 6 };
+  const unlocked = purchaseWinterMikoSkin(stats, richInv);
+  assert.equal(unlocked.code, 1);
+  assert.equal(unlocked.inventory.snowflakes, 1);
+  assert.equal(unlocked.stats.equippedSkin, 'winter_miko');
+
+  const swappedBack = equipMikoSkin(unlocked.stats, 'default');
+  assert.equal(swappedBack.equippedSkin, 'default');
+});
+
+test('viewport expands visible range with web resolution while keeping 1024:720 tile ratio', () => {
+  const mobile = computePixelViewport(390, 844);
+  const desktop = computePixelViewport(1440, 900);
+
+  assert.ok(desktop.logicalWidth > mobile.logicalWidth);
+  assert.ok(desktop.visibleCols > mobile.visibleCols);
+
+  const worldPt = screenToWorld(
+    720,
+    450,
+    { left: 0, top: 0, width: 1440, height: 900 },
+    desktop,
+    100,
+    200
+  );
+  assert.ok(Math.abs(worldPt.worldX - 100) < 2);
+  assert.ok(Math.abs(worldPt.worldY - 200) < 2);
+});
+
+test('priority target overrides nearest auto-target until resolved', () => {
+  const nearHerb: WorldEntity = {
+    id: 'herb-1',
+    kind: 'herb',
+    name: '알 수 없는 풀',
+    x: 10,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    hp: 1,
+    maxHp: 1,
+    dir: 'down',
+    action: 'idle',
+    actionTimer: 0,
+    aiTimer: 0,
+    attackCooldown: 0,
+    telegraphTimer: 0,
+    hitFlashTimer: 0,
+    koTimer: 0,
+    isHostile: false,
+    isInteractable: true,
+  };
+  const farBerry: WorldEntity = {
+    ...nearHerb,
+    id: 'berry-1',
+    kind: 'berry',
+    name: '알 수 없는 열매',
+    x: 120,
+    y: 40,
+  };
+
+  const auto = selectAutoOrPriorityTarget(0, 0, [nearHerb, farBerry], null);
+  assert.equal(auto?.id, 'herb-1');
+
+  const prioritized = selectAutoOrPriorityTarget(0, 0, [nearHerb, farBerry], 'berry-1');
+  assert.equal(prioritized?.id, 'berry-1');
+});
