@@ -1403,17 +1403,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           [295, 345],
           [473, 345],
         ];
+        const lantern = getEntityAsset('village_lantern');
         for (const [lx, ly] of lanterns) {
-          ctx.fillStyle = 'rgba(0,0,0,0.3)';
-          ctx.beginPath();
-          ctx.ellipse(lx, ly + 10, 9, 4, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#78716c';
-          ctx.fillRect(lx - 4, ly - 5, 8, 14);
-          ctx.fillStyle = '#57534e';
-          ctx.fillRect(lx - 9, ly - 14, 18, 5);
-          ctx.fillStyle = '#fde68a';
-          ctx.fillRect(lx - 4, ly - 10, 8, 5);
+          ctx.drawImage(lantern, lx - 24, ly - 34, 48, 48);
         }
 
         const torii = getEntityAsset('village_torii');
@@ -1573,7 +1565,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
           const spr =
             sim.stats.equippedSkin === 'default'
-              ? getFoxMikoAsset()
+              ? getFoxMikoAsset(p.dir, p.action, p.walkPhase)
               : getEventMikoAsset(p.dir, p.action, p.walkPhase);
           const drawW = 48;
           const drawH = 72;

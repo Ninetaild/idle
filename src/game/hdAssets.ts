@@ -643,7 +643,12 @@ export function getEntityAsset(
     );
     if (enemy) return enemy;
   }
-  const propIndex: Record<string, number> = { herb: 0, berry: 1 };
+  const propIndex: Record<string, number> = {
+    herb: 0, berry: 1, village_shrine: 2, village_torii: 4,
+    village_lantern: 5, village_chest: 6, snowflake: 7,
+    gold_coin: 8, snowflake_pickup: 9, snowflake_crystal: 10,
+    village_sign: 11,
+  };
   if (kind in propIndex) {
     const prop = getSvgAtlasFrame(
       'assets/sprites/field_props_atlas.svg', 96, 96, propIndex[kind], 0, 96, 68
@@ -986,9 +991,18 @@ export function getEntityAsset(
 
 
 /** Main character frame from the committed 4x4 sprite atlas. */
-export function getFoxMikoAsset(): HTMLCanvasElement {
-  return getSvgAtlasFrame('assets/sprites/protagonist_atlas.svg', 64, 96, 0, 0, 64, 96)
-    ?? getMikoAsset('down', 'idle', 0, 'default');
+export function getFoxMikoAsset(
+  dir: Direction,
+  action: ActorAction,
+  walkPhase: number
+): HTMLCanvasElement {
+  const row: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
+  const col = action === 'walk'
+    ? (Math.floor(walkPhase) % 2) + 1
+    : action === 'pickup' || action === 'hurt' ? 3 : 0;
+  return getSvgAtlasFrame(
+    'assets/sprites/protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96
+  ) ?? getMikoAsset(dir, action, walkPhase, 'default');
 }
 
 /** Event skin frame from the committed winter-accented 4x4 sprite atlas. */
