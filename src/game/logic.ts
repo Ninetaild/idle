@@ -22,6 +22,7 @@ export const ECONOMY_PRICES = {
   baseEnhanceCost: 60,
   enhanceCostMultiplier: 1.2,
   winterMikoSnowflakes: 500,
+  herbSell: 12,
 } as const;
 
 export const STOMACHACHE_DURATION_SEC = 10;
@@ -544,4 +545,30 @@ export function selectAutoOrPriorityTarget(
   }
 
   return nearest;
+}
+
+/** Sells field-gathered herbs to the village merchant. */
+export function sellHerbsToMerchant(
+  stats: PlayerStats,
+  inventory: Inventory,
+  quantity = 1
+): ActionOutcome {
+  const sellQty = Math.min(inventory.herbs, Math.max(0, Math.floor(quantity)));
+  if (sellQty <= 0) {
+    return {
+      stats,
+      inventory,
+      message: '판매할 약초가 없습니다.',
+      tone: 'warning',
+      code: 0,
+    };
+  }
+  const earned = sellQty * ECONOMY_PRICES.herbSell;
+  return {
+    stats: { ...stats, gold: stats.gold + earned },
+    inventory: { ...inventory, herbs: inventory.herbs - sellQty },
+    message: `약초 ${sellQty}개를 팔아 ${earned}엽전을 얻었습니다.`,
+    tone: 'positive',
+    code: 1,
+  };
 }
