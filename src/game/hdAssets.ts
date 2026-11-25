@@ -941,7 +941,7 @@ export function getFoxMikoAsset(): HTMLCanvasElement {
         foxMikoReady = true;
       }
     };
-    foxMikoImage.src = '/assets/fox_miko_pixel.png';
+    foxMikoImage.src = `${import.meta.env.BASE_URL}assets/fox_miko_pixel.png`;
   }
   return getMikoAsset('down', 'idle', 0, 'default');
 }
