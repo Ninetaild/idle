@@ -20,6 +20,7 @@ import {
   sellPillsToMerchant,
 } from './game/logic';
 import { soundEngine } from './game/sound';
+import { decryptSave, encryptSave } from './game/saveCodec';
 import type {
   FieldId,
   GameScreenState,
@@ -36,6 +37,11 @@ const SAVE_STORAGE_KEY = 'miko_herb_stroll_save_v3';
 interface SavedData {
   stats: PlayerStats;
   inventory: Inventory;
+  zone?: ZoneId;
+  fieldId?: FieldId;
+  autoIdle?: boolean;
+  zoomOffset?: number;
+  muted?: boolean;
 }
 
 function loadSavedData(): SavedData | null {
@@ -47,6 +53,11 @@ function loadSavedData(): SavedData | null {
     return {
       stats: { ...createInitialStats(), ...parsed.stats },
       inventory: { ...createInitialInventory(), ...parsed.inventory },
+      zone: parsed.zone ?? 'village',
+      fieldId: parsed.fieldId ?? 'forest',
+      autoIdle: parsed.autoIdle ?? true,
+      zoomOffset: parsed.zoomOffset ?? 0,
+      muted: parsed.muted ?? false,
     };
   } catch {
     return null;
@@ -62,11 +73,11 @@ export default function App() {
   const [screenState, setScreenState] = useState<GameScreenState>(
     isAutostart ? 'playing' : 'title'
   );
-  const [zone, setZone] = useState<ZoneId>('village');
-  const [fieldId, setFieldId] = useState<FieldId>('forest');
-  const [autoIdle, setAutoIdle] = useState(true);
-  const [zoomOffset, setZoomOffset] = useState(0);
-  const [muted, setMuted] = useState(false);
+  const [zone, setZone] = useState<ZoneId>(initialSave.current?.zone ?? 'village');
+  const [fieldId, setFieldId] = useState<FieldId>(initialSave.current?.fieldId ?? 'forest');
+  const [autoIdle, setAutoIdle] = useState(initialSave.current?.autoIdle ?? true);
+  const [zoomOffset, setZoomOffset] = useState(initialSave.current?.zoomOffset ?? 0);
+  const [muted, setMuted] = useState(initialSave.current?.muted ?? false);
 
   const [stats, setStats] = useState<PlayerStats>(
     () => initialSave.current?.stats ?? createInitialStats()
@@ -117,12 +128,12 @@ export default function App() {
     try {
       localStorage.setItem(
         SAVE_STORAGE_KEY,
-        JSON.stringify({ stats, inventory })
+        JSON.stringify({ stats, inventory, zone, fieldId, autoIdle, zoomOffset, muted })
       );
     } catch {
       // Ignore storage quota errors
     }
-  }, [stats, inventory]);
+  }, [stats, inventory, zone, fieldId, autoIdle, zoomOffset, muted]);
 
   const startGame = useCallback(() => {
     setScreenState('playing');
@@ -287,6 +298,34 @@ export default function App() {
     soundEngine.playPickup();
   };
 
+  const exportSaveCode = useCallback(
+    async (passphrase: string) =>
+      encryptSave<SavedData>({ stats, inventory, zone, fieldId, autoIdle, zoomOffset, muted }, passphrase),
+    [stats, inventory, zone, fieldId, autoIdle, zoomOffset, muted]
+  );
+
+  const importSaveCode = useCallback(async (code: string, passphrase: string) => {
+    const saved = await decryptSave<SavedData>(code, passphrase);
+    if (!saved.stats || !saved.inventory) {
+      throw new Error('저장 데이터에 필수 정보가 없습니다.');
+    }
+    const nextStats = { ...createInitialStats(), ...saved.stats };
+    const nextInventory = { ...createInitialInventory(), ...saved.inventory };
+    setStats(nextStats);
+    setInventory(nextInventory);
+    setZone(saved.zone === 'field' ? 'field' : 'village');
+    setFieldId(saved.fieldId && FIELD_METADATA[saved.fieldId] ? saved.fieldId : 'forest');
+    setAutoIdle(saved.autoIdle ?? true);
+    setZoomOffset(saved.zoomOffset ?? 0);
+    setMuted(saved.muted ?? false);
+    soundEngine.setMuted(saved.muted ?? false);
+    setActiveStation(null);
+    setStationResultText(null);
+    setScreenState('playing');
+    engineRef.current?.syncExternalState(nextStats, nextInventory);
+    pushLog('암호화된 모험 기록을 불러왔습니다.', 'positive');
+  }, [pushLog]);
+
   const handleResetSave = () => {
     const freshStats = createInitialStats();
     const freshInv = createInitialInventory();
@@ -391,6 +430,8 @@ export default function App() {
           setScreenState('title');
         }}
         onResetSave={handleResetSave}
+        onExportSave={exportSaveCode}
+        onImportSave={importSaveCode}
       />
     </main>
   );
