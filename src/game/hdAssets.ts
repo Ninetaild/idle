@@ -211,13 +211,13 @@ export type MapTileKind =
   | 'tree_snow';
 
 export function getMapTileAsset(kind: MapTileKind, variant = 0): HTMLCanvasElement {
-  const tileIndex: Record<MapTileKind, number> = {
+  const tileIndex: Partial<Record<MapTileKind, number>> = {
     village_courtyard: 0, village_stone: 6, village_grass: 8,
     forest_moss: 1, plains_meadow: 2, river_shore: 3,
-    river_water: 4, snowy_ground: 5, tree_green: 11, tree_snow: 10,
+    river_water: 4, snowy_ground: 5,
   };
   const atlasIndex = tileIndex[kind];
-  const atlasTile = getSvgAtlasFrame(
+  const atlasTile = atlasIndex === undefined ? null : getSvgAtlasFrame(
     'assets/sprites/field_tiles_atlas.svg', 128, 90,
     atlasIndex % 4, Math.floor(atlasIndex / 4), 128, 90
   );
