@@ -22,7 +22,7 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
     ['deriveKey']
   );
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: new Uint8Array(salt).buffer, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     material,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -38,7 +38,7 @@ export async function encryptSave<T>(payload: T, passphrase: string): Promise<st
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase, salt);
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: new Uint8Array(iv).buffer },
     key,
     new TextEncoder().encode(JSON.stringify(payload))
   );
@@ -53,7 +53,7 @@ export async function decryptSave<T>(code: string, passphrase: string): Promise<
   try {
     const key = await deriveKey(passphrase, fromBase64Url(saltText));
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromBase64Url(ivText) },
+      { name: 'AES-GCM', iv: fromBase64Url(ivText).buffer },
       key,
       fromBase64Url(dataText)
     );
