@@ -54,7 +54,9 @@ function loadSavedData(): SavedData | null {
     return {
       stats: { ...createInitialStats(), ...parsed.stats },
       inventory: { ...createInitialInventory(), ...parsed.inventory },
-      zone: parsed.zone ?? 'village',
+      // Always resume in the village after a browser restart.
+      // Keep the saved field selection for the next walk.
+      zone: 'village',
       fieldId: parsed.fieldId ?? 'forest',
       autoIdle: parsed.autoIdle ?? true,
       zoomOffset: parsed.zoomOffset ?? 0,

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
-import { getMikoAsset } from '../game/hdAssets';
+import { getFoxMikoAsset, getEventMikoAsset } from '../game/hdAssets';
 import { ECONOMY_PRICES, FIELD_METADATA } from '../game/logic';
 import { getEnhancePool } from '../game/probability';
 import type { FieldId, Inventory, MikoSkinId, PlayerStats } from '../game/types';
@@ -30,11 +30,31 @@ const SkinPreviewCanvas: React.FC<{ skin: MikoSkinId }> = ({ skin }) => {
     if (!c) return;
     const ctx = c.getContext('2d');
     if (!ctx) return;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, c.width, c.height);
-    const spr = getMikoAsset('down', 'idle', 0, skin);
-    ctx.drawImage(spr, 0, 0, c.width, c.height);
+
+    // Use the exact sprite atlas frames used by the in-game protagonist.
+    // Atlas images load asynchronously, so retry briefly before falling back.
+    let attempts = 0;
+    let raf = 0;
+    const drawPreview = () => {
+      const spr = skin === 'winter_miko'
+        ? getEventMikoAsset('down', 'idle', 0)
+        : getFoxMikoAsset('down', 'idle', 0);
+      const isAtlasFrame = spr.width === 64 && spr.height === 96;
+      if (isAtlasFrame || attempts >= 60) {
+        const scale = Math.min(c.width / spr.width, c.height / spr.height);
+        const drawW = spr.width * scale;
+        const drawH = spr.height * scale;
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.drawImage(spr, (c.width - drawW) / 2, (c.height - drawH) / 2, drawW, drawH);
+        return;
+      }
+      attempts += 1;
+      raf = requestAnimationFrame(drawPreview);
+    };
+    drawPreview();
+    return () => cancelAnimationFrame(raf);
   }, [skin]);
 
   return (
