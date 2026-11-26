@@ -586,7 +586,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     updateSize();
-    container.addEventListener('wheel', onWheel, { passive: false });
     const observer = new ResizeObserver(updateSize);
     observer.observe(container);
 
@@ -598,6 +597,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const current = propsRef.current.zoomOffset;
       propsRef.current.onZoomChange(Math.max(-3, Math.min(3, current + direction)));
     };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (propsRef.current.screenState !== 'playing') return;
