@@ -122,28 +122,15 @@ export const SNOWFLAKE_DROP_TABLE: readonly WeightedEntry<1 | 2 | 3>[] = [
 ];
 
 /**
- * Stage-based Enhancement Probability Pool (강화 단계별 하락 / 유지 / 성공 확률 풀)
+ * Enhancement outcomes contain only success and maintain.
  */
-export type EnhanceOutcomeCode = 'success' | 'maintain' | 'downgrade';
+export type EnhanceOutcomeCode = 'success' | 'maintain';
 
-export function getEnhancePool(
-  level: number
-): readonly WeightedEntry<EnhanceOutcomeCode>[] {
-  if (level <= 0) {
-    return [
-      { code: 'success', text: '강화 성공! 부적의 영력이 한 단계 높아졌습니다.', per: 0.85 },
-      { code: 'maintain', text: '강화 유지. 기운이 흩어져 변화가 없었습니다.', per: 0.15 },
-      { code: 'downgrade', text: '강화 하락.', per: 0 },
-    ];
-  }
-
-  const success = Math.max(0.2, Number((0.8 - level * 0.08).toFixed(2)));
-  const downgrade = Math.min(0.45, Number((0.08 + level * 0.05).toFixed(2)));
-  const maintain = Number(Math.max(0.1, 1 - success - downgrade).toFixed(2));
-
+export function getEnhancePool(level: number): readonly WeightedEntry<EnhanceOutcomeCode>[] {
+  const success = level <= 0 ? 0.85 : Math.max(0.2, Number((0.8 - level * 0.08).toFixed(2)));
+  const maintain = Number((1 - success).toFixed(2));
   return [
     { code: 'success', text: '강화 성공! 부적의 영력이 한 단계 높아졌습니다.', per: success },
     { code: 'maintain', text: '강화 유지. 부적의 기운이 그대로 머물렀습니다.', per: maintain },
-    { code: 'downgrade', text: '강화 하락! 역류한 기운으로 부적 단계가 내려갔습니다.', per: downgrade },
   ];
 }
