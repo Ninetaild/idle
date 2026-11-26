@@ -468,7 +468,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     camera: { x: VILLAGE_WIDTH / 2, y: 245, trauma: 0 },
     stats: { ...stats },
     inventory: { ...inventory },
-    entities: createVillageEntities(),
+    entities: createVillageEntities() as WorldEntity[],
     projectiles: [] as Projectile[],
     particles: Array.from({ length: PARTICLE_POOL_SIZE }, (): Particle => ({
       active: false,
