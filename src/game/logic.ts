@@ -199,7 +199,7 @@ export function attemptEnhanceCharm(stats: PlayerStats, inventory: Inventory, rn
   const success = rolled.code === 'success';
   const nextLevel = stats.enhanceLevel + (success ? 1 : 0);
   const nextAttack = success ? Number((stats.attackPower * 1.1).toFixed(2)) : stats.attackPower;
-  const nextCost = Math.round(stats.enhanceCost * ECONOMY_PRICES.enhanceCostMultiplier);
+  const nextCost = Math.round(ECONOMY_PRICES.baseEnhanceCost * Math.pow(ECONOMY_PRICES.enhanceCostMultiplier, nextLevel));
   return {
     stats: { ...stats, gold: stats.gold - stats.enhanceCost, enhanceLevel: nextLevel, enhanceCost: nextCost, attackPower: nextAttack },
     inventory,
