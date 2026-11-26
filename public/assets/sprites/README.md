@@ -16,6 +16,38 @@ The uploaded field props atlas has a 768×512 viewBox and is loaded as a 6×2 gr
 
 Character rows: front, back, left, right. Character columns: idle, step A, step B, action. The field tile atlas is a 4×4 grid. The props atlas is a 6×2 grid.
 
+## Next atlas worklist
+
+The following elements are currently drawn by procedural canvas fallback or are not assigned an atlas cell. Create them as transparent, standalone SVG sprites first, then pack them into category-specific atlases and connect the paths in `src/game/hdAssets.ts`.
+
+### 1. Field events — next priority
+- `event_injured`: injured traveler
+- `event_bandit`: disguised bandit; include both concealed/injured and revealed/hostile poses
+- `event_fox_shrine`: lost baby fox
+- `event_ancient_stone`: moss-covered ancient stone monument
+- `event_peddler`: wandering herbalist with a basket/backpack
+
+### 2. Village facilities
+- `village_cauldron`: alchemy cauldron
+- `village_merchant`: village menu attendant/NPC
+- `village_event_shop`: event shop attendant/stall
+
+### 3. Village scenery and landmarks
+- `village_shrine`: already present in props atlas slot 2; verify placement/use before drawing again
+- `village_torii`: already present in props atlas slot 4
+- `village_lantern`: already present in props atlas slot 5
+- Village courtyard, stone path and grass ground are already represented in `field_tiles_atlas.svg`
+
+### 4. Field tiles and environmental objects
+- `tree_green`: currently procedural fallback; add a leafy tree tile/object
+- `tree_snow`: currently procedural fallback; add a snow-covered tree tile/object
+- Existing field terrain tiles: forest moss, plains meadow, river shore, river water and snowy ground
+
+### Already available; do not duplicate in the next batch
+- Field gatherables: `herb`, `berry` (dedicated SVGs)
+- Yokai: dokkaebi, fairy, gumiho, tengu, kappa and yuki-onna (currently in `enemy_atlas.png`)
+- Additional props: chest, snowflake, gold coin, frozen orb, snow crystal and signpost (props atlas slots 6–11)
+
 Enemy sprites use procedural walk, idle-breathing, hover, hit and defeat motion in-game. Hold `Ctrl` and scroll the mouse wheel over the game viewport to zoom; the range is clamped to three steps in either direction.
 
 
