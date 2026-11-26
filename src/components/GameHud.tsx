@@ -53,6 +53,7 @@ export const GameHud: React.FC<GameHudProps> = ({
   onOpenStation,
 }) => {
   const [ghostHp, setGhostHp] = useState(stats.hp);
+  const [logsExpanded, setLogsExpanded] = useState(false);
 
   useEffect(() => {
     if (stats.hp >= ghostHp) {
@@ -170,27 +171,37 @@ export const GameHud: React.FC<GameHudProps> = ({
               우선 목표: {currentTargetLabel}
             </div>
           )}
-          <div
+          <button
+            type="button"
             aria-live="polite"
-            className="shrine-panel rounded-md px-3 py-2 flex flex-col gap-0.5 text-xs"
+            aria-expanded={logsExpanded}
+            aria-label={logsExpanded ? '전투 로그 접기' : '전투 로그 펼치기'}
+            onClick={() => setLogsExpanded((expanded) => !expanded)}
+            className="pointer-events-auto shrine-panel rounded-md px-3 py-2 flex flex-col gap-1 text-xs text-left cursor-pointer w-full max-h-[4.8rem] md:max-h-[13rem] overflow-hidden"
           >
-            {logs.slice(0, 3).map((entry) => (
-              <div
-                key={entry.id}
-                className={
-                  entry.tone === 'positive'
-                    ? 'text-[#86efac] truncate'
-                    : entry.tone === 'warning'
-                      ? 'text-[#fde68a] truncate'
-                      : entry.tone === 'combat'
-                        ? 'text-[#fca5a5] truncate'
-                        : 'text-[#e6d5b8] truncate'
-                }
-              >
-                {entry.text}
-              </div>
-            ))}
-          </div>
+            <span className="flex items-center justify-between gap-3 text-[10px] text-[#a89172] whitespace-nowrap">
+              <span>모험 기록</span>
+              <span>{logsExpanded ? '클릭하여 접기' : '클릭하여 펼치기'}</span>
+            </span>
+            <span className="flex flex-col gap-0.5">
+              {logs.slice(0, logsExpanded ? 10 : 3).map((entry) => (
+                <span
+                  key={entry.id}
+                  className={
+                    entry.tone === 'positive'
+                      ? 'text-[#86efac] truncate'
+                      : entry.tone === 'warning'
+                        ? 'text-[#fde68a] truncate'
+                        : entry.tone === 'combat'
+                          ? 'text-[#fca5a5] truncate'
+                          : 'text-[#e6d5b8] truncate'
+                  }
+                >
+                  {entry.text}
+                </span>
+              ))}
+            </span>
+          </button>
         </div>
 
         {/* Bottom-Right Unified Perimeter Action Dock */}
@@ -249,7 +260,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                   className="shrine-button px-3 py-2 text-xs font-medium bg-[#3b2d26] hover:bg-[#4e3b31] text-[#fbf8f1] border border-[#6b4f3a] rounded-xs flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Store className="w-3.5 h-3.5 text-[#fde68a]" aria-hidden="true" />
-                  <span>상점</span>
+                  <span>메뉴</span>
                 </button>
 
                 <button
