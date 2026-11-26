@@ -360,6 +360,7 @@ export default function App() {
         fieldId={fieldId}
         autoIdle={autoIdle}
         zoomOffset={zoomOffset}
+        onZoomChange={(next) => setZoomOffset(next)}
         stats={stats}
         inventory={inventory}
         onStateSync={handleStateSync}
@@ -387,8 +388,6 @@ export default function App() {
           stats={stats}
           inventory={inventory}
           autoIdle={autoIdle}
-          pixelScale={pixelScale}
-          visibleTiles={visibleTiles}
           currentTargetLabel={currentTargetLabel}
           logs={logs}
           muted={muted}
@@ -401,9 +400,6 @@ export default function App() {
           }}
           onPause={() =>
             setScreenState((prev) => (prev === 'playing' ? 'paused' : 'playing'))
-          }
-          onCycleZoom={() =>
-            setZoomOffset((prev) => (prev === 0 ? 1 : prev === 1 ? -1 : 0))
           }
           onEnterZone={handleZoneChange}
           onToggleAutoIdle={() => setAutoIdle((prev) => !prev)}

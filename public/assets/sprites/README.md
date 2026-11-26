@@ -11,3 +11,5 @@ Crisp-edged SVG sprite sheets designed for nearest-neighbor rendering.
 | `field_props_atlas.svg` | Herbs, berries, shrine, torii, lantern, chest and collectibles | 96×96, 6×2 |
 
 Character rows: front, back, left, right. Character columns: idle, step A, step B, action. The field tile atlas is a 4×4 grid. The props atlas is a 6×2 grid.
+
+Game zoom: hold `Ctrl` and scroll the mouse wheel over the game viewport. The zoom range is clamped to three steps in either direction.

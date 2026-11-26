@@ -56,6 +56,7 @@ interface GameCanvasProps {
   fieldId: FieldId;
   autoIdle: boolean;
   zoomOffset: number;
+  onZoomChange: (nextZoomOffset: number) => void;
   stats: PlayerStats;
   inventory: Inventory;
   onStateSync: (
@@ -368,6 +369,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   fieldId,
   autoIdle,
   zoomOffset,
+  onZoomChange,
   stats,
   inventory,
   onStateSync,
@@ -386,6 +388,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     fieldId,
     autoIdle,
     zoomOffset,
+    onZoomChange,
     onStateSync,
     onLog,
     onZoneChange,
@@ -398,6 +401,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     fieldId,
     autoIdle,
     zoomOffset,
+    onZoomChange,
     onStateSync,
     onLog,
     onZoneChange,
@@ -582,8 +586,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
 
     updateSize();
+    container.addEventListener('wheel', onWheel, { passive: false });
     const observer = new ResizeObserver(updateSize);
     observer.observe(container);
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      if (e.deltaY === 0) return;
+      const direction = e.deltaY < 0 ? 1 : -1;
+      const current = propsRef.current.zoomOffset;
+      propsRef.current.onZoomChange(Math.max(-3, Math.min(3, current + direction)));
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (propsRef.current.screenState !== 'playing') return;
@@ -1685,6 +1699,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => {
       cancelAnimationFrame(rafId);
       observer.disconnect();
+      container.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);

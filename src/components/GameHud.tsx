@@ -9,7 +9,6 @@ import {
   Store,
   Volume2,
   VolumeX,
-  ZoomIn,
 } from 'lucide-react';
 import { FIELD_METADATA } from '../game/logic';
 import type {
@@ -28,14 +27,11 @@ interface GameHudProps {
   stats: PlayerStats;
   inventory: Inventory;
   autoIdle: boolean;
-  pixelScale: number;
-  visibleTiles: { cols: number; rows: number };
   currentTargetLabel: string | null;
   logs: LogEntry[];
   muted: boolean;
   onToggleMute: () => void;
   onPause: () => void;
-  onCycleZoom: () => void;
   onEnterZone: (zone: ZoneId, fieldId?: FieldId) => void;
   onToggleAutoIdle: () => void;
   onOpenStation: (station: VillageStationId) => void;
@@ -47,14 +43,11 @@ export const GameHud: React.FC<GameHudProps> = ({
   stats,
   inventory,
   autoIdle,
-  pixelScale,
-  visibleTiles,
   currentTargetLabel,
   logs,
   muted,
   onToggleMute,
   onPause,
-  onCycleZoom,
   onEnterZone,
   onToggleAutoIdle,
   onOpenStation,
@@ -125,21 +118,6 @@ export const GameHud: React.FC<GameHudProps> = ({
 
         {/* Top-Right Compact Utility Controls */}
         <div className="pointer-events-auto flex items-center gap-1.5 shrink-0 md:order-3">
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              onCycleZoom();
-            }}
-            aria-label={`시야 배율 변경 (현재 ${pixelScale}배, ${visibleTiles.cols}x${visibleTiles.rows} 타일)`}
-            title={`해상도 기반 시야: ${visibleTiles.cols}x${visibleTiles.rows} 타일`}
-            className="shrine-panel shrine-button h-8 md:h-9 px-2 md:px-2.5 rounded-md flex items-center gap-1 text-xs font-mono-num text-[#e6d5b8] hover:border-[#d9c5a0] cursor-pointer"
-          >
-            <ZoomIn className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>x{pixelScale}</span>
-          </button>
-
           <button
             type="button"
             tabIndex={-1}
