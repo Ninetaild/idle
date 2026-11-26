@@ -58,7 +58,8 @@ function getSvgAtlasFrame(
     entry = { image, ready: false };
     image.onload = () => { entry!.ready = true; };
     image.onerror = () => { console.warn(`[assets] 이미지를 불러오지 못했습니다: ${image.src}`); };
-    image.src = `${import.meta.env.BASE_URL}${path}`;
+    const version = typeof __ASSET_VERSION__ === 'string' ? __ASSET_VERSION__ : 'dev';
+    image.src = `${import.meta.env.BASE_URL}${path}?v=${version}`;
     svgAtlasImages.set(path, entry);
   }
   if (!entry.ready) return null;

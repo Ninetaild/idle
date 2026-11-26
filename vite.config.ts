@@ -1,12 +1,26 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import {createHash} from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+/** Content hash of the sprites, so a changed image is never served from a stale browser cache. */
+function getAssetVersion(): string {
+  const dir = path.resolve(__dirname, 'public/assets/sprites');
+  const hash = createHash('sha256');
+  for (const name of fs.readdirSync(dir).sort()) {
+    hash.update(name).update(fs.readFileSync(path.join(dir, name)));
+  }
+  return hash.digest('hex').slice(0, 10);
+}
+
 export default defineConfig(() => {
   return {
     base: '/idle/',
+    define: {
+      __ASSET_VERSION__: JSON.stringify(getAssetVersion()),
+    },
     plugins: [
       react(),
       tailwindcss(),

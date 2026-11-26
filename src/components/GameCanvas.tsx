@@ -543,7 +543,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     if (zone === 'village') {
       sim.player.x = VILLAGE_WIDTH / 2;
       sim.player.y = 260;
-      sim.player.dir = 'up';
+      sim.player.dir = 'down';
       sim.camera.x = VILLAGE_WIDTH / 2;
       sim.camera.y = 245;
       sim.entities = createVillageEntities();
