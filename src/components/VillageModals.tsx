@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { getFoxMikoAsset, getEventMikoAsset } from '../game/hdAssets';
-import { ABILITY_LABELS, ECONOMY_PRICES, FIELD_METADATA, SKILL_DEFINITIONS } from '../game/logic';
-import { getEnhancePool } from '../game/probability';
-import type { AbilityId, FieldId, Inventory, MikoSkinId, PlayerStats, SkillId } from '../game/types';
+import { ABILITY_LABELS, ECONOMY_PRICES, FIELD_METADATA, getSkillMultiplier, SKILL_DEFINITIONS } from '../game/logic';
+import { getDifficultyMultiplier, getEliteTable, getEnhancePool } from '../game/probability';
+import type { AbilityRoll, FieldId, Inventory, MikoSkinId, PlayerStats } from '../game/types';
 import type { VillageStationId } from './GameHud';
 
 interface VillageModalsProps {
@@ -19,7 +19,11 @@ interface VillageModalsProps {
   onSellHerbs: (qty: number) => void;
   onEnhanceCharm: () => void;
   onImbueCharm: () => void;
-  onChangeSkill: (skill: SkillId) => void;
+  onConvertSkill: () => void;
+  /** Rolled options awaiting the player's decision (memorial). */
+  pendingAbilities: AbilityRoll[] | null;
+  onKeepAbilities: () => void;
+  onAcceptAbilities: () => void;
   onSetFieldDifficulty: (fieldId: FieldId, level: number) => void;
   onBuyWinterSkin: () => void;
   onEquipSkin: (skin: MikoSkinId) => void;
@@ -83,7 +87,10 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
   onSellHerbs,
   onEnhanceCharm,
   onImbueCharm,
-  onChangeSkill,
+  onConvertSkill,
+  pendingAbilities,
+  onKeepAbilities,
+  onAcceptAbilities,
   onSetFieldDifficulty,
   onBuyWinterSkin,
   onEquipSkin,
@@ -98,7 +105,9 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
   const successPct = Math.round((enhancePool.find((e) => e.code === 'success')?.per ?? 0) * 100);
   const maintainPct = Math.round((enhancePool.find((e) => e.code === 'maintain')?.per ?? 0) * 100);
   const skillId = stats.equippedSkill ?? 'foxfire_burst';
-  const skillOptions = Object.entries(SKILL_DEFINITIONS) as [SkillId, (typeof SKILL_DEFINITIONS)[SkillId]][];
+  const skill = SKILL_DEFINITIONS[skillId];
+  const rewardHint = (level: number) =>
+    `재화 ×${getDifficultyMultiplier(level).toFixed(2)} · 강적 ${(getEliteTable(level)[1].per * 100).toFixed(1)}%`;
   const abilityList = stats.abilities ?? [];
 
   const modalTitle =
@@ -149,6 +158,7 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="font-bold text-[#fbf8f1] whitespace-nowrap">{meta.name}</div>
                           <div className="text-[11px] text-[#d9c5a0] whitespace-nowrap overflow-hidden text-ellipsis">{meta.subtitle}</div>
+                          <div className="text-[10px] text-[#fde68a] font-mono-num whitespace-nowrap overflow-hidden text-ellipsis">{rewardHint(level)}</div>
                         </div>
                         <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#d9c5a0] whitespace-nowrap shrink-0">난이도</label>
                         <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#140f0e] border border-[#6b4f3a] rounded-xs px-2 py-1 text-xs text-[#fde68a] whitespace-nowrap shrink-0">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
@@ -172,6 +182,7 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="font-bold text-[#e0f2fe] whitespace-nowrap">{meta.name}</div>
                           <div className="text-[11px] text-[#bae6fd] whitespace-nowrap overflow-hidden text-ellipsis">{meta.subtitle}</div>
+                          <div className="text-[10px] text-[#fde68a] font-mono-num whitespace-nowrap overflow-hidden text-ellipsis">{rewardHint(level)}</div>
                         </div>
                         <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#bae6fd] whitespace-nowrap shrink-0">난이도</label>
                         <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#10202d] border border-[#38bdf8] rounded-xs px-2 py-1 text-xs text-[#e0f2fe] whitespace-nowrap shrink-0">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
@@ -434,21 +445,38 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                     <span className="text-[#bae6fd]">다음 비용 1.1배</span>
                   </div>
                 </div>
-                <button type="button" disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.abilityImprintJewels} onClick={onImbueCharm} className="shrine-button w-full py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] disabled:opacity-40 border border-[#c4b5fd] text-[#ede9fe] rounded-xs">능력 부여 · 보옥 {ECONOMY_PRICES.abilityImprintJewels}개</button>
+                <button type="button" disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.abilityImprintJewels} onClick={onImbueCharm} hidden={pendingAbilities !== null} className="shrine-button w-full py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] disabled:opacity-40 border border-[#c4b5fd] text-[#ede9fe] rounded-xs">능력 부여 · 보옥 {ECONOMY_PRICES.abilityImprintJewels}개</button>
                 <div className="text-[11px] text-[#d9c5a0]">보유 보옥: {inventory.jewels ?? 0}개 · 5종 중 3종 무작위 · 배율 1.1~1.5 (중위값 1.3)</div>
-                {abilityList.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">{abilityList.map((ability) => <div key={ability.id} className="px-2 py-1.5 bg-[#121916] border border-[#4b3475] rounded-xs text-[11px] text-[#ddd6fe]">{ABILITY_LABELS[ability.id as AbilityId]} ×{ability.multiplier.toFixed(2)}</div>)}</div>}
+                {pendingAbilities ? (
+                  <div role="group" aria-label="옵션 메모리얼" className="p-3 bg-[#1d1630] border border-[#c4b5fd] rounded-xs space-y-2">
+                    <div className="text-xs font-bold text-[#ede9fe]">메모리얼 · 어느 옵션을 남길까요?</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([['이전 옵션', abilityList], ['새 옵션', pendingAbilities]] as const).map(([title, list]) => (
+                        <div key={title} className="p-2 bg-[#121916] border border-[#4b3475] rounded-xs text-[11px] text-[#ddd6fe] space-y-1">
+                          <div className="font-bold text-[#fde68a]">{title}</div>
+                          {list.map((ability) => <div key={ability.id}>{ABILITY_LABELS[ability.id]} ×{ability.multiplier.toFixed(2)}</div>)}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" autoFocus onClick={onKeepAbilities} className="shrine-button flex-1 py-2 text-xs font-bold bg-[#d93829] hover:bg-[#e54839] border border-[#f3ca52] text-white rounded-xs cursor-pointer">이전으로 되돌리기 (기본)</button>
+                      <button type="button" onClick={onAcceptAbilities} className="shrine-button flex-1 py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] border border-[#c4b5fd] text-[#ede9fe] rounded-xs cursor-pointer">새 옵션 적용</button>
+                    </div>
+                    <div className="text-[10px] text-[#d9c5a0]">창을 닫으면 이전 옵션이 유지됩니다. 사용한 보옥은 돌려받지 않습니다.</div>
+                  </div>
+                ) : (
+                  abilityList.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">{abilityList.map((ability) => <div key={ability.id} className="px-2 py-1.5 bg-[#121916] border border-[#4b3475] rounded-xs text-[11px] text-[#ddd6fe]">{ABILITY_LABELS[ability.id]} ×{ability.multiplier.toFixed(2)}</div>)}</div>
+                )}
               </div>
               <div className="p-3 bg-[#172838] border border-[#38bdf8]/60 rounded-xs space-y-2">
                 <div className="font-bold text-sm text-[#bae6fd]">전투 기술</div>
-                <div className="text-[11px] text-[#d9c5a0]">장착 중인 기술만 표시 · 변경 비용: 보옥 {ECONOMY_PRICES.skillChangeJewels}개</div>
+                <div className="text-[11px] text-[#d9c5a0]">변환 시 기술(범위/단일)과 위력이 무작위로 교체됩니다 · 범위 ×0.70~1.00 · 단일 ×1.20~1.50</div>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-sm text-[#e0f2fe] whitespace-nowrap">{SKILL_DEFINITIONS[skillId].name} · 장착 중</div>
-                    <div className="text-xs text-[#bae6fd] whitespace-nowrap">{SKILL_DEFINITIONS[skillId].type === 'area' ? '범위' : '단일'} · 공격력 ×{SKILL_DEFINITIONS[skillId].minMultiplier.toFixed(1)}~{SKILL_DEFINITIONS[skillId].maxMultiplier.toFixed(1)}</div>
+                    <div className="font-bold text-sm text-[#e0f2fe] whitespace-nowrap">{skill.name} · 장착 중</div>
+                    <div className="text-xs text-[#bae6fd] whitespace-nowrap">{skill.type === 'area' ? '범위' : '단일'} · 공격력 ×{getSkillMultiplier(stats).toFixed(2)}</div>
                   </div>
-                  <select aria-label="전투 기술 변경" value={skillId} disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.skillChangeJewels} onChange={(event) => onChangeSkill(event.target.value as SkillId)} className="max-w-[48%] bg-[#10202d] border border-[#38bdf8] rounded-xs px-2 py-2 text-xs text-[#e0f2fe] shrink-0">
-                    {skillOptions.map(([id, skill]) => <option key={id} value={id}>{skill.name}</option>)}
-                  </select>
+                  <button type="button" disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.skillChangeJewels} onClick={onConvertSkill} className="shrine-button px-3 py-2 text-xs font-bold bg-[#0284c7] hover:bg-[#0ea5e9] disabled:opacity-40 text-white rounded-xs whitespace-nowrap shrink-0 cursor-pointer disabled:cursor-not-allowed">기술 변환 · 보옥 {ECONOMY_PRICES.skillChangeJewels}개</button>
                 </div>
               </div>
             </>

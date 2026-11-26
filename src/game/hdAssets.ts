@@ -1,3 +1,11 @@
+import {
+  ATLAS_PATHS,
+  ENEMY_ATLAS_INDEX,
+  EVENT_PROTAGONIST_ATLAS_PATH,
+  PROP_ATLAS_INDEX,
+  PROPS_CELL,
+  STANDALONE_SPRITE_PATHS,
+} from './assetPaths';
 import type { ActorAction, Direction, MikoSkinId } from './types';
 
 export const ASSET_MASTER_WIDTH = 1024;
@@ -49,6 +57,7 @@ function getSvgAtlasFrame(
     const image = new Image();
     entry = { image, ready: false };
     image.onload = () => { entry!.ready = true; };
+    image.onerror = () => { console.warn(`[assets] 이미지를 불러오지 못했습니다: ${image.src}`); };
     image.src = `${import.meta.env.BASE_URL}${path}`;
     svgAtlasImages.set(path, entry);
   }
@@ -271,7 +280,7 @@ export function getMapTileAsset(kind: MapTileKind, variant = 0): HTMLCanvasEleme
   };
   const atlasIndex = tileIndex[kind];
   const atlasTile = atlasIndex === undefined ? null : getSvgAtlasFrame(
-    'assets/sprites/field_tiles_atlas.svg', 128, 90,
+    ATLAS_PATHS.fieldTiles, 128, 90,
     atlasIndex % 4, Math.floor(atlasIndex / 4), 128, 90
   );
   if (atlasTile) return atlasTile;
@@ -686,43 +695,31 @@ export function getEntityAsset(
   kind: string,
   revealedBandit = false
 ): HTMLCanvasElement {
-  const enemyIndex: Record<string, number> = {
-    yokai_dokkaebi: 0, fairy_sylph: 1, yokai_gumiho: 2,
-    yokai_tengu: 3, yokai_kappa: 4, yokai_yukionna: 5,
-  };
-  if (kind in enemyIndex) {
+  if (kind in ENEMY_ATLAS_INDEX) {
     const enemy = getSvgAtlasFrame(
-      'assets/sprites/enemy_atlas.png', 96, 96, enemyIndex[kind], 0, 128, 90
+      ATLAS_PATHS.enemy, 96, 96, ENEMY_ATLAS_INDEX[kind], 0, 128, 90
     );
     if (enemy) return enemy;
   }
-  const gatherablePath: Partial<Record<string, string>> = {
-    herb: 'assets/sprites/field_gatherable_herb.svg',
-    berry: 'assets/sprites/field_gatherable_berry.svg',
-  };
-  const gatherableSvg = gatherablePath[kind];
-  if (gatherableSvg) {
-    const gatherable = getSvgAtlasFrame(gatherableSvg, 96, 96, 0, 0, 96, 68);
-    if (gatherable) return gatherable;
+  const standalonePath = STANDALONE_SPRITE_PATHS[
+    kind === 'event_bandit' && revealedBandit ? 'event_bandit_revealed' : kind
+  ];
+  if (standalonePath) {
+    // Standalone sprites are authored as one 96x96 cell.
+    const standalone = getSvgAtlasFrame(standalonePath, 96, 96, 0, 0, 128, 90);
+    if (standalone) return standalone;
   }
-
-  // field_props_atlas.svg is 768×512: six 128×256 cells per row,
-  // with the second row beginning at y=256. Do not treat it as a 96×96 atlas.
-  const propIndex: Record<string, number> = {
-    village_shrine: 2, village_torii: 4, village_lantern: 5,
-    village_chest: 6, snowflake: 7, gold_coin: 8,
-    snowflake_pickup: 9, snowflake_crystal: 10, village_sign: 11,
-  };
-  if (kind in propIndex) {
-    const propIndexValue = propIndex[kind];
+  if (kind in PROP_ATLAS_INDEX) {
+    const index = PROP_ATLAS_INDEX[kind];
+    const isPlant = kind === 'herb' || kind === 'berry';
     const prop = getSvgAtlasFrame(
-      'assets/sprites/field_props_atlas.svg',
-      128,
-      256,
-      propIndexValue % 6,
-      Math.floor(propIndexValue / 6),
+      ATLAS_PATHS.fieldProps,
+      PROPS_CELL.width,
+      PROPS_CELL.height,
+      index % PROPS_CELL.columns,
+      Math.floor(index / PROPS_CELL.columns),
       96,
-      96
+      isPlant ? 68 : 96
     );
     if (prop) return prop;
   }
@@ -1072,7 +1069,7 @@ export function getFoxMikoAsset(
     ? (Math.floor(walkPhase) % 2) + 1
     : action === 'pickup' || action === 'hurt' ? 3 : 0;
   return getSvgAtlasFrame(
-    'assets/sprites/protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96, true
+    ATLAS_PATHS.protagonist, 64, 96, col, row[dir], 64, 96, true
   ) ?? getMikoAsset(dir, action, walkPhase, 'default');
 }
 
@@ -1084,7 +1081,8 @@ export function getEventMikoAsset(
 ): HTMLCanvasElement {
   const row: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
   const col = action === 'walk' ? (Math.floor(walkPhase) % 2) + 1 : action === 'pickup' || action === 'hurt' ? 3 : 0;
-  return getSvgAtlasFrame(
-    'assets/sprites/event_protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96, true
-  ) ?? getMikoAsset(dir, action, walkPhase, 'winter_miko');
+  const frame = EVENT_PROTAGONIST_ATLAS_PATH
+    ? getSvgAtlasFrame(EVENT_PROTAGONIST_ATLAS_PATH, 64, 96, col, row[dir], 64, 96, true)
+    : null;
+  return frame ?? getMikoAsset(dir, action, walkPhase, 'winter_miko');
 }

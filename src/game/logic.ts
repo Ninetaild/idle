@@ -14,6 +14,7 @@ import type {
   MikoSkinId,
   PlayerStats,
   WorldEntity,
+  FieldEntityKind,
   AbilityId,
   SkillId,
   AbilityRoll,
@@ -32,10 +33,34 @@ export const ECONOMY_PRICES = {
 
 export const STOMACHACHE_DURATION_SEC = 2;
 export const PLAYER_RANGED_ATTACK_COOLDOWN_SEC = 10;
-export const MAX_FIELD_ENTITY_KIND_COUNT = 3;
+/** Maximum number of living field entities of each kind. */
+export const FIELD_ENTITY_LIMITS: Readonly<Record<FieldEntityKind, number>> = {
+  herb: 4,
+  berry: 3,
+  yokai_dokkaebi: 2,
+  fairy_sylph: 2,
+  yokai_gumiho: 2,
+  yokai_tengu: 2,
+  yokai_kappa: 2,
+  yokai_yukionna: 2,
+  event_injured: 1,
+  event_bandit: 1,
+  event_fox_shrine: 1,
+  event_ancient_stone: 1,
+  event_peddler: 1,
+};
+export const MAX_FIELD_ENTITY_TOTAL = 16;
 
-export function canSpawnEntityKind(kind: WorldEntity['kind'], entities: readonly WorldEntity[], maxCount = MAX_FIELD_ENTITY_KIND_COUNT): boolean {
+export function canSpawnEntityKind(kind: FieldEntityKind, entities: readonly WorldEntity[], maxCount = FIELD_ENTITY_LIMITS[kind]): boolean {
   return entities.filter((entity) => entity.kind === kind && entity.hp > 0 && entity.koTimer <= 0).length < maxCount;
+}
+
+/** Applies a reward multiplier; the fractional part becomes a chance of +1 so small drops scale too. */
+export function scaleReward(amount: number, multiplier: number, rng: () => number = Math.random): number {
+  const scaled = Number((amount * multiplier).toFixed(6));
+  const whole = Math.floor(scaled);
+  const fraction = scaled - whole;
+  return whole + (fraction > 0 && rng() < fraction ? 1 : 0);
 }
 
 export function shouldInteractWithBerry(hp: number, maxHp: number): boolean {
@@ -244,32 +269,65 @@ export function getFieldDifficulty(stats: PlayerStats, fieldId: FieldId): number
 export function setFieldDifficulty(stats: PlayerStats, fieldId: FieldId, level: number): PlayerStats {
   return { ...stats, fieldDifficulties: { forest: 1, plains: 1, river: 1, snowy_forest: 1, ...stats.fieldDifficulties, [fieldId]: Math.max(1, Math.min(10, Math.floor(level))) } };
 }
-export function imbueCharm(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ActionOutcome {
+export interface ImprintOutcome extends ActionOutcome {
+  /** Newly rolled options. They take effect only through `applyAbilities`. */
+  candidate: AbilityRoll[] | null;
+}
+
+export function formatAbilities(abilities: readonly AbilityRoll[]): string {
+  return abilities.map((a) => `${ABILITY_LABELS[a.id]} ×${a.multiplier.toFixed(2)}`).join(' · ');
+}
+
+/** Spends the jewel and rolls new options without replacing the current ones. */
+export function imbueCharm(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ImprintOutcome {
   const jewels = inventory.jewels ?? 0;
-  if (jewels < ECONOMY_PRICES.abilityImprintJewels) return { stats, inventory, message: `보옥이 부족합니다. (필요: ${ECONOMY_PRICES.abilityImprintJewels}개)`, tone: 'warning', code: 'insufficient' };
+  if (jewels < ECONOMY_PRICES.abilityImprintJewels) return { stats, inventory, candidate: null, message: `보옥이 부족합니다. (필요: ${ECONOMY_PRICES.abilityImprintJewels}개)`, tone: 'warning', code: 'insufficient' };
   const ids: AbilityId[] = ['attack_power', 'max_hp', 'gold_gain', 'attack_frequency', 'attack_speed'];
   const shuffled = [...ids];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   const rolls = [1.1 + rng() * 0.1, 1.3, 1.4 + rng() * 0.1];
-  const abilities: AbilityRoll[] = shuffled.slice(0, 3).map((id, index) => ({ id, multiplier: Number(rolls[index].toFixed(2)) }));
+  const candidate: AbilityRoll[] = shuffled.slice(0, 3).map((id, index) => ({ id, multiplier: Number(rolls[index].toFixed(2)) }));
+  return {
+    stats,
+    inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.abilityImprintJewels },
+    candidate,
+    message: `새 옵션: ${formatAbilities(candidate)}`,
+    tone: 'positive', code: 'imbued',
+  };
+}
+
+/** Equips a set of options, keeping the current HP ratio when max HP changes. */
+export function applyAbilities(stats: PlayerStats, abilities: AbilityRoll[]): PlayerStats {
   const oldHp = getAbilityMultiplier(stats, 'max_hp');
   const newHp = abilities.find((ability) => ability.id === 'max_hp')?.multiplier ?? 1;
   const hpRatio = stats.maxHp > 0 ? stats.hp / stats.maxHp : 1;
   const nextMaxHp = Math.round((stats.maxHp / oldHp) * newHp);
-  return {
-    stats: { ...stats, abilities, maxHp: nextMaxHp, hp: Math.min(nextMaxHp, Math.round(nextMaxHp * hpRatio)) },
-    inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.abilityImprintJewels },
-    message: `능력 부여 완료! ${abilities.map((a) => `${ABILITY_LABELS[a.id]} ×${a.multiplier.toFixed(2)}`).join(' · ')}`,
-    tone: 'positive', code: 'imbued',
-  };
+  return { ...stats, abilities, maxHp: nextMaxHp, hp: Math.min(nextMaxHp, Math.round(nextMaxHp * hpRatio)) };
 }
-export function changeEquippedSkill(stats: PlayerStats, inventory: Inventory, skill: SkillId): ActionOutcome {
+
+/** Fixed multiplier of the equipped technique (range midpoint before the first conversion). */
+export function getSkillMultiplier(stats: PlayerStats): number {
+  const skill = SKILL_DEFINITIONS[stats.equippedSkill ?? 'foxfire_burst'];
+  const value = stats.skillMultiplier ?? (skill.minMultiplier + skill.maxMultiplier) / 2;
+  return Number(Math.max(skill.minMultiplier, Math.min(skill.maxMultiplier, value)).toFixed(2));
+}
+
+/** Spends a jewel to roll a random technique (area or single) and a new damage multiplier. */
+export function convertSkill(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ActionOutcome {
   const jewels = inventory.jewels ?? 0;
-  if (stats.equippedSkill === skill) return { stats, inventory, message: '이미 선택한 기술입니다.', tone: 'neutral', code: 'unchanged' };
   if (jewels < ECONOMY_PRICES.skillChangeJewels) return { stats, inventory, message: `보옥이 부족합니다. (필요: ${ECONOMY_PRICES.skillChangeJewels}개)`, tone: 'warning', code: 'insufficient' };
-  return { stats: { ...stats, equippedSkill: skill }, inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.skillChangeJewels }, message: `기술을 ${SKILL_DEFINITIONS[skill].name}(으)로 변경했습니다.`, tone: 'positive', code: 'changed' };
+  const ids = Object.keys(SKILL_DEFINITIONS) as SkillId[];
+  const skillId = ids[Math.min(ids.length - 1, Math.floor(rng() * ids.length))];
+  const multiplier = rollSkillMultiplier(skillId, rng);
+  const skill = SKILL_DEFINITIONS[skillId];
+  return {
+    stats: { ...stats, equippedSkill: skillId, skillMultiplier: multiplier },
+    inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.skillChangeJewels },
+    message: `기술 변환: ${skill.name} (${skill.type === 'area' ? '범위' : '단일'}) 공격력 ×${multiplier.toFixed(2)}`,
+    tone: 'positive', code: 'changed',
+  };
 }
 
 /**
@@ -306,7 +364,8 @@ export function gatherFieldHerb(
 export function eatFieldBerry(
   stats: PlayerStats,
   inventory: Inventory,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  rewardMultiplier = 1
 ): ActionOutcome {
   const rolled = rollWeighted(BERRY_EFFECT_TABLE, rng);
 
@@ -325,7 +384,7 @@ export function eatFieldBerry(
   }
 
   const healMap: Record<number, number> = { 2: 8, 3: 14, 4: 22, 5: 35 };
-  const goldBonus = rolled.code === 5 ? Math.round(15 * getAbilityMultiplier(stats, 'gold_gain')) : 0;
+  const goldBonus = rolled.code === 5 ? Math.round(15 * getAbilityMultiplier(stats, 'gold_gain') * rewardMultiplier) : 0;
 
   return {
     stats: {
@@ -335,7 +394,7 @@ export function eatFieldBerry(
       totalGathered: stats.totalGathered + 1,
     },
     inventory,
-    message: rolled.text,
+    message: goldBonus > 0 ? rolled.text.replace('엽전 +15', `엽전 +${goldBonus}`) : rolled.text,
     tone: 'positive',
     code: rolled.code,
   };
@@ -348,8 +407,10 @@ export function resolveFieldEvent(
   stats: PlayerStats,
   inventory: Inventory,
   eventCode: 1 | 2 | 3 | 4 | 5 | null = null,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  rewardMultiplier = 1
 ): ActionOutcome & { triggerCombat: boolean } {
+  const reward = (base: number) => Math.round(base * getAbilityMultiplier(stats, 'gold_gain') * rewardMultiplier);
   const chosenCode = eventCode ?? rollWeighted(FIELD_EVENT_TABLE, rng).code;
 
   if (chosenCode === 2) {
@@ -369,13 +430,13 @@ export function resolveFieldEvent(
         stats: {
           ...stats,
           goodDeeds: stats.goodDeeds + 1,
-          gold: stats.gold + Math.round(25 * getAbilityMultiplier(stats, 'gold_gain')),
+          gold: stats.gold + reward(25),
         },
         inventory: {
           ...inventory,
           elixirs: inventory.elixirs - 1,
         },
-        message: '다친 사람에게 단약을 건네주었다. (단약 -1, 선행 +1, 답례 25엽전)',
+        message: `다친 사람에게 단약을 건네주었다. (단약 -1, 선행 +1, 답례 ${reward(25)}엽전)`,
         tone: 'positive',
         code: 1,
         triggerCombat: false,
@@ -398,14 +459,14 @@ export function resolveFieldEvent(
         stats: {
           ...stats,
           goodDeeds: stats.goodDeeds + 1,
-          gold: stats.gold + Math.round(20 * getAbilityMultiplier(stats, 'gold_gain')),
+          gold: stats.gold + reward(20),
         },
         inventory: {
           ...inventory,
           herbs: inventory.herbs - 1,
           elixirs: inventory.elixirs + 1,
         },
-        message: '길 잃은 아기 여우에게 풀을 나누어 주자 여우 구슬 단약을 두고 갔다! (풀 -1, 단약 +1, 선행 +1, 20엽전)',
+        message: `길 잃은 아기 여우에게 풀을 나누어 주자 여우 구슬 단약을 두고 갔다! (풀 -1, 단약 +1, 선행 +1, ${reward(20)}엽전)`,
         tone: 'positive',
         code: 3,
         triggerCombat: false,
@@ -446,10 +507,10 @@ export function resolveFieldEvent(
       return {
         stats: {
           ...stats,
-          gold: stats.gold + Math.round(35 * getAbilityMultiplier(stats, 'gold_gain')),
+          gold: stats.gold + reward(35),
         },
         inventory,
-        message: stoneRoll.text,
+        message: stoneRoll.text.replace('엽전 +35', `엽전 +${reward(35)}`),
         tone: 'positive',
         code: 4,
         triggerCombat: false,
@@ -472,13 +533,13 @@ export function resolveFieldEvent(
   return {
     stats: {
       ...stats,
-      gold: stats.gold + Math.round(18 * getAbilityMultiplier(stats, 'gold_gain')),
+      gold: stats.gold + reward(18),
     },
     inventory: {
       ...inventory,
       herbs: inventory.herbs + 2,
     },
-    message: '방랑 약초꾼과 정보를 나누고 여분 약초를 받았다. (풀 +2, 엽전 +18)',
+    message: `방랑 약초꾼과 정보를 나누고 여분 약초를 받았다. (풀 +2, 엽전 +${reward(18)})`,
     tone: 'positive',
     code: 5,
     triggerCombat: false,
@@ -491,13 +552,15 @@ export function resolveFieldEvent(
 export function rollSnowflakeDrop(
   fieldId: FieldId,
   inventory: Inventory,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  rewardMultiplier = 1
 ): { inventory: Inventory; gained: number; message: string | null } {
   if (fieldId !== 'snowy_forest') {
     return { inventory, gained: 0, message: null };
   }
   const rolled = rollWeighted(SNOWFLAKE_DROP_TABLE, rng);
-  const gained = rolled.code === 2 ? 2 : rolled.code === 1 ? 1 : 0;
+  const baseGain = rolled.code === 2 ? 2 : rolled.code === 1 ? 1 : 0;
+  const gained = baseGain > 0 ? scaleReward(baseGain, rewardMultiplier, rng) : 0;
   if (gained > 0) {
     return {
       inventory: {
@@ -505,7 +568,7 @@ export function rollSnowflakeDrop(
         snowflakes: inventory.snowflakes + gained,
       },
       gained,
-      message: rolled.text,
+      message: rolled.text.replace(/눈송이 \+\d+/, `눈송이 +${gained}`),
     };
   }
   return { inventory, gained: 0, message: null };

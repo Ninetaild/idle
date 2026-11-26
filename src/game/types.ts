@@ -62,6 +62,8 @@ export interface PlayerStats {
   equippedSkin: MikoSkinId;
   abilities?: AbilityRoll[];
   equippedSkill?: SkillId;
+  /** Damage multiplier fixed by the latest technique conversion. */
+  skillMultiplier?: number;
   fieldDifficulties?: Record<FieldId, number>;
 }
 

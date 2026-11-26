@@ -13,20 +13,32 @@ import {
   rollSnowflakeDrop,
   selectAutoOrPriorityTarget,
   canSpawnEntityKind,
+  MAX_FIELD_ENTITY_TOTAL,
+  scaleReward,
+  getSkillMultiplier,
   shouldInteractWithBerry,
   PLAYER_RANGED_ATTACK_COOLDOWN_SEC,
   getAbilityMultiplier,
   getFieldDifficulty,
-  rollSkillMultiplier,
   SKILL_DEFINITIONS,
 } from '../game/logic';
 import {
-  ELITE_ENEMY_TABLE,
+  getDifficultyMultiplier,
+  getEliteTable,
   FIELD_EVENT_TABLE,
   FIELD_SPAWN_TABLE,
   rollWeighted,
   YOKAI_SPECIES_TABLE,
 } from '../game/probability';
+import { tileHash } from '../game/tileHash';
+import {
+  getRiverColumn,
+  hasSceneryTree,
+  isBeyondDespawnRange,
+  isRiverWaterAt,
+  pickSpawnPoint,
+  type ViewSize,
+} from '../game/world';
 import { soundEngine } from '../game/sound';
 import type {
   ActorAction,
@@ -83,21 +95,13 @@ const VILLAGE_ROWS = 11;
 const VILLAGE_WIDTH = VILLAGE_COLS * TILE_WIDTH; // 768
 const VILLAGE_HEIGHT = VILLAGE_ROWS * TILE_HEIGHT; // 495
 
-const FIELD_COLS = 18;
-const FIELD_ROWS = 16;
-const FIELD_WIDTH = FIELD_COLS * TILE_WIDTH; // 1152
-const FIELD_HEIGHT = FIELD_ROWS * TILE_HEIGHT; // 720
+const FIELD_START_X = 0;
+const FIELD_START_Y = 0;
 
 const PARTICLE_POOL_SIZE = 140;
 const SNOW_FLAKE_COUNT = 64;
 
 let entitySeq = 1;
-
-function tileHash(c: number, r: number): number {
-  let h = (c * 374761393 + r * 668265263) ^ ((c ^ r) * 1274126177);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) % 100;
-}
 
 function drawOutlinedText(
   ctx: CanvasRenderingContext2D,
@@ -188,11 +192,6 @@ function createVillageEntities(): (WorldEntity & { kind: VillageEntityKind })[] 
       isInteractable: true,
     },
   ];
-}
-
-function getPlayableFieldBounds(fieldId: FieldId) {
-  const maxX = fieldId === 'river' ? FIELD_WIDTH - 235 : FIELD_WIDTH - 68;
-  return { minX: 68, maxX, minY: 56, maxY: FIELD_HEIGHT - 56 };
 }
 
 function createYokaiByCode(
@@ -343,7 +342,7 @@ function applyEnemyScaling(entity: WorldEntity, difficultyLevel: number): WorldE
     return entity;
   }
   const levelScale = 1 + (Math.max(1, Math.min(10, difficultyLevel)) - 1) * 0.18;
-  const isElite = rollWeighted(ELITE_ENEMY_TABLE).code === 'elite';
+  const isElite = rollWeighted(getEliteTable(difficultyLevel)).code === 'elite';
   const eliteMultiplier = isElite ? 2 : 1;
   entity.maxHp = Math.round(entity.maxHp * levelScale * eliteMultiplier);
   entity.hp = entity.maxHp;
@@ -354,34 +353,32 @@ function applyEnemyScaling(entity: WorldEntity, difficultyLevel: number): WorldE
   return entity;
 }
 
+function createBaseEntity(fieldId: FieldId, x: number, y: number): WorldEntity {
+  return {
+    id: nextId('ent'), kind: 'herb', name: '알 수 없는 풀', x, y, vx: 0, vy: 0,
+    hp: 1, maxHp: 1, dir: 'down', action: 'idle', actionTimer: 0,
+    aiTimer: Math.random() * 2, attackCooldown: 0.9 + Math.random() * 0.7,
+    telegraphTimer: 0, hitFlashTimer: 0, koTimer: 0,
+    isHostile: false, isInteractable: true, orbitAngle: Math.random() * Math.PI * 2,
+    snowDusted: fieldId === 'snowy_forest',
+  };
+}
+
 function spawnRandomFieldEntity(
   playerX: number,
   playerY: number,
   fieldId: FieldId,
-  existingEntities: readonly WorldEntity[] = [],
-  difficultyLevel = 1
+  existingEntities: readonly WorldEntity[],
+  difficultyLevel: number,
+  view: ViewSize,
+  offscreenOnly: boolean
 ): FieldWorldEntity | null {
-  const bounds = getPlayableFieldBounds(fieldId);
   for (let spawnAttempt = 0; spawnAttempt < 16; spawnAttempt++) {
     const rolled = rollWeighted(FIELD_SPAWN_TABLE);
-    let x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-    let y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const dx = x - playerX;
-      const dy = y - playerY;
-      if (dx * dx + dy * dy > 80 * 80) break;
-      x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-      y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-    }
-
-    const base: WorldEntity = {
-      id: nextId('ent'), kind: 'herb', name: '알 수 없는 풀', x, y, vx: 0, vy: 0,
-      hp: 1, maxHp: 1, dir: 'down', action: 'idle', actionTimer: 0,
-      aiTimer: Math.random() * 2, attackCooldown: 0.9 + Math.random() * 0.7,
-      telegraphTimer: 0, hitFlashTimer: 0, koTimer: 0,
-      isHostile: false, isInteractable: true, orbitAngle: Math.random() * Math.PI * 2,
-      snowDusted: fieldId === 'snowy_forest',
-    };
+    const { x, y } = pickSpawnPoint(playerX, playerY, view, offscreenOnly);
+    // Plants and encounters stay on dry ground; yokai may appear anywhere.
+    if (rolled.code !== 3 && isRiverWaterAt(fieldId, x)) continue;
+    const base = createBaseEntity(fieldId, x, y);
 
     let candidate: FieldWorldEntity;
     if (rolled.code === 1) {
@@ -401,6 +398,30 @@ function spawnRandomFieldEntity(
     if (canSpawnEntityKind(candidate.kind, existingEntities)) return candidate;
   }
   return null;
+}
+
+/** Initial field population: a few guaranteed nearby encounters, then random fill. */
+function seedFieldEntities(
+  startX: number,
+  startY: number,
+  fieldId: FieldId,
+  difficultyLevel: number,
+  view: ViewSize
+): WorldEntity[] {
+  const at = (dx: number, dy: number) => createBaseEntity(fieldId, startX + dx, startY + dy);
+  const specialSpecies: 4 | 5 | 6 = fieldId === 'snowy_forest' ? 6 : fieldId === 'river' ? 5 : 4;
+  const seeded: WorldEntity[] = [
+    at(-95, 42),
+    { ...at(102, -46), kind: 'berry', name: '알 수 없는 열매' },
+    applyEnemyScaling(createYokaiByCode(at(150, 75), specialSpecies), difficultyLevel),
+    createEventByCode(at(-155, -80), 3), // Lost Fox
+    createEventByCode(at(190, -125), 4), // Ancient Stone
+  ];
+  for (let i = 0; i < 40 && seeded.length < 12; i++) {
+    const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded, difficultyLevel, view, false);
+    if (ent) seeded.push(ent);
+  }
+  return seeded;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -527,67 +548,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       sim.camera.y = 245;
       sim.entities = createVillageEntities();
     } else {
-      const startX = fieldId === 'river' ? FIELD_WIDTH / 2 - 110 : FIELD_WIDTH / 2;
-      const startY = FIELD_HEIGHT / 2;
+      const startX = FIELD_START_X;
+      const startY = FIELD_START_Y;
       sim.player.x = startX;
       sim.player.y = startY;
       sim.player.dir = 'down';
       sim.camera.x = startX;
       sim.camera.y = startY;
 
-      const seeded: WorldEntity[] = [];
-      for (let i = 0; i < 12; i++) {
-        const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded, getFieldDifficulty(sim.stats, fieldId));
-        if (!ent) continue;
-        if (i === 0) {
-          ent.kind = 'herb';
-          ent.name = '알 수 없는 풀';
-          ent.hp = 1;
-          ent.maxHp = 1;
-          ent.revealedBandit = false;
-          ent.isHostile = false;
-          ent.isInteractable = true;
-          ent.isElite = false;
-          ent.damageMultiplier = 1;
-          ent.x = startX - 95;
-          ent.y = startY + 42;
-        } else if (i === 1) {
-          ent.kind = 'berry';
-          ent.name = '알 수 없는 열매';
-          ent.hp = 1;
-          ent.maxHp = 1;
-          ent.revealedBandit = false;
-          ent.isHostile = false;
-          ent.isInteractable = true;
-          ent.isElite = false;
-          ent.damageMultiplier = 1;
-          ent.x = startX + 102;
-          ent.y = startY - 46;
-        } else if (i === 2) {
-          const specialSpecies: 4 | 5 | 6 =
-            fieldId === 'snowy_forest' ? 6 : fieldId === 'river' ? 5 : 4;
-          const yokai = createYokaiByCode(ent, specialSpecies);
-          applyEnemyScaling(yokai, getFieldDifficulty(sim.stats, fieldId));
-          yokai.x = startX + 150;
-          yokai.y = startY + 75;
-          seeded.push(yokai);
-          continue;
-        } else if (i === 3) {
-          const ev = createEventByCode(ent, 3); // Lost Fox
-          ev.x = startX - 155;
-          ev.y = startY - 80;
-          seeded.push(ev);
-          continue;
-        } else if (i === 4) {
-          const ev = createEventByCode(ent, 4); // Ancient Stone
-          ev.x = startX + 190;
-          ev.y = startY - 125;
-          seeded.push(ev);
-          continue;
-        }
-        seeded.push(ent);
-      }
-      sim.entities = seeded;
+      sim.entities = seedFieldEntities(
+        startX,
+        startY,
+        fieldId,
+        getFieldDifficulty(sim.stats, fieldId),
+        { width: sim.viewport.logicalWidth, height: sim.viewport.logicalHeight }
+      );
       sim.spawnTimer = 2.0;
     }
   }, [zone, fieldId]);
@@ -726,9 +701,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     };
 
+    const currentRewardMultiplier = () =>
+      getDifficultyMultiplier(getFieldDifficulty(simRef.current.stats, propsRef.current.fieldId));
+
     const maybeAwardSnowflake = (x: number, y: number) => {
       const sim = simRef.current;
-      const drop = rollSnowflakeDrop(propsRef.current.fieldId, sim.inventory);
+      const drop = rollSnowflakeDrop(propsRef.current.fieldId, sim.inventory, Math.random, currentRewardMultiplier());
       if (drop.gained && drop.message) {
         sim.inventory = drop.inventory;
         emitParticles(x, y, '#bae6fd', 12, 68);
@@ -768,11 +746,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           fairy_sylph: 18,
           event_bandit: 26,
         };
-        const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getAbilityMultiplier(sim.stats, 'gold_gain'));
+        const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getAbilityMultiplier(sim.stats, 'gold_gain') * currentRewardMultiplier());
         sim.stats.gold += goldDrop;
         if (ent.isHostile && ent.isElite) {
-          sim.inventory = { ...sim.inventory, eventTokens: (sim.inventory.eventTokens ?? 0) + 1, jewels: (sim.inventory.jewels ?? 0) + 1 };
-          propsRef.current.onLog('강적을 정화해 이벤트 재화 1개와 보옥 1개를 확정 획득했습니다!', 'positive');
+          const tokens = scaleReward(1, currentRewardMultiplier());
+          const jewels = scaleReward(1, currentRewardMultiplier());
+          sim.inventory = { ...sim.inventory, eventTokens: (sim.inventory.eventTokens ?? 0) + tokens, jewels: (sim.inventory.jewels ?? 0) + jewels };
+          propsRef.current.onLog(`강적을 정화해 이벤트 재화 ${tokens}개와 보옥 ${jewels}개를 획득했습니다!`, 'positive');
         }
         sim.stats.totalDefeated += 1;
         emitParticles(ent.x, ent.y, '#f87171', 16, 90);
@@ -855,7 +835,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         p.actionTimer = 0.28;
         ent.hp = 0;
         ent.koTimer = 0.15;
-        const outcome = eatFieldBerry(sim.stats, sim.inventory);
+        const outcome = eatFieldBerry(sim.stats, sim.inventory, Math.random, currentRewardMultiplier());
         sim.stats = outcome.stats;
         sim.inventory = outcome.inventory;
         soundEngine.playPickup();
@@ -893,7 +873,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const res = resolveFieldEvent(
           sim.stats,
           sim.inventory,
-          codeMap[ent.kind] ?? 1
+          codeMap[ent.kind] ?? 1,
+          Math.random,
+          currentRewardMultiplier()
         );
 
         if (res.triggerCombat) {
@@ -985,11 +967,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         syncReact(true);
       } else {
         sim.priorityTargetId = null;
-        const bounds = getPlayableFieldBounds(propsRef.current.fieldId);
-        sim.waypoint = {
-          x: Math.max(bounds.minX, Math.min(bounds.maxX, worldX)),
-          y: Math.max(bounds.minY, Math.min(bounds.maxY, worldY)),
-        };
+        sim.waypoint = { x: worldX, y: worldY };
         emitParticles(sim.waypoint.x, sim.waypoint.y, '#e2e8f0', 5, 24);
       }
     };
@@ -1214,22 +1192,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           p.y -= 36;
           return;
         }
-      } else {
-        const bounds = getPlayableFieldBounds(curField);
-        p.x = Math.max(bounds.minX, Math.min(bounds.maxX, p.x));
-        p.y = Math.max(bounds.minY, Math.min(bounds.maxY, p.y));
       }
 
       if (curZone === 'field') {
+        const view = { width: sim.viewport.logicalWidth, height: sim.viewport.logicalHeight };
+        // Drop what was left far behind so new encounters can appear ahead.
+        sim.entities = sim.entities.filter((e) =>
+          e.id === sim.priorityTargetId || !isBeyondDespawnRange(p.x, p.y, e.x, e.y, view)
+        );
         const aliveCount = sim.entities.filter((e) => e.koTimer <= 0 && e.hp > 0).length;
         sim.spawnTimer -= dt;
-        if (sim.spawnTimer <= 0 && aliveCount < 13) {
-          sim.spawnTimer = 2.4;
-          const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities, getFieldDifficulty(sim.stats, curField));
+        if (sim.spawnTimer <= 0 && aliveCount < MAX_FIELD_ENTITY_TOTAL) {
+          // Refill quickly while the surroundings are sparse (e.g. while walking).
+          sim.spawnTimer = aliveCount < 10 ? 0.8 : 2.4;
+          const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities, getFieldDifficulty(sim.stats, curField), view, true);
           if (spawned) sim.entities.push(spawned);
         }
 
-        const bounds = getPlayableFieldBounds(curField);
         for (let i = sim.entities.length - 1; i >= 0; i--) {
           const ent = sim.entities[i];
           if (ent.koTimer > 0) {
@@ -1253,8 +1232,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ent.y += ent.vy * dt;
           ent.vx *= Math.pow(0.02, dt);
           ent.vy *= Math.pow(0.02, dt);
-          ent.x = Math.max(bounds.minX, Math.min(bounds.maxX, ent.x));
-          ent.y = Math.max(bounds.minY, Math.min(bounds.maxY, ent.y));
 
           if (!ent.isHostile) {
             if (Math.hypot(ent.x - p.x, ent.y - p.y) < 26 && manualInput) {
@@ -1387,7 +1364,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             kind: skill.name === '빙결의 고리' ? 'ice' : skill.name === '풍신참' ? 'wind' : 'foxfire',
             x: p.x, y: p.y - 8,
             vx: (dx / distance) * speed, vy: (dy / distance) * speed,
-            damage: sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power') * rollSkillMultiplier(sim.stats.equippedSkill ?? 'foxfire_burst'),
+            damage: sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power') * getSkillMultiplier(sim.stats),
             life: 1.4, splashRadius: skill.type === 'area' ? 92 : 0, skillName: skill.name,
           });
           p.rangedCooldown = PLAYER_RANGED_ATTACK_COOLDOWN_SEC / getAbilityMultiplier(sim.stats, 'attack_frequency');
@@ -1467,26 +1444,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.save();
       ctx.translate(-camLeft, -camTop);
 
-      const startCol = Math.max(0, Math.floor(camLeft / TILE_WIDTH) - 1);
+      // The ground has no edges: every visible tile is generated from its coordinate.
+      const startCol = Math.floor(camLeft / TILE_WIDTH) - 1;
       const endCol = Math.ceil((camLeft + vp.logicalWidth) / TILE_WIDTH) + 1;
-      const startRow = Math.max(0, Math.floor(camTop / TILE_HEIGHT) - 1);
-      const endRow = Math.ceil((camTop + vp.logicalHeight) / TILE_HEIGHT) + 1;
-
-      const maxCol = curZone === 'village' ? VILLAGE_COLS : FIELD_COLS;
-      const maxRow = curZone === 'village' ? VILLAGE_ROWS : FIELD_ROWS;
+      const startRow = Math.floor(camTop / TILE_HEIGHT) - 1;
+      const endRow = Math.ceil((camTop + vp.logicalHeight) / TILE_HEIGHT) + 2;
+      const trees: { col: number; row: number; variant: number }[] = [];
 
       for (let r = startRow; r <= endRow; r++) {
         for (let c = startCol; c <= endCol; c++) {
-          if (c < 0 || r < 0 || c >= maxCol || r >= maxRow) continue;
           const tx = c * TILE_WIDTH;
           const ty = r * TILE_HEIGHT;
           const hash = tileHash(c, r);
           const variant = hash % 4;
+          const river = curZone === 'field' && curField === 'river' ? getRiverColumn(c) : 'land';
 
           let tileKind: MapTileKind = 'forest_moss';
           if (curZone === 'village') {
             const inCourtyard = c >= 2 && c <= 9 && r >= 2 && r <= 8;
-            const onPath = (c === 5 || c === 6) && r >= 2 && r <= 10;
+            // The path leads on past the torii and out of sight.
+            const onPath = (c === 5 || c === 6) && r >= 2;
             tileKind = onPath
               ? 'village_stone'
               : inCourtyard
@@ -1495,9 +1472,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           } else if (curField === 'plains') {
             tileKind = 'plains_meadow';
           } else if (curField === 'river') {
-            if (c >= maxCol - 3) tileKind = 'river_water';
-            else if (c === maxCol - 4) tileKind = 'river_shore';
-            else tileKind = 'forest_moss';
+            if (river === 'water') tileKind = 'river_water';
+            else if (river === 'shore') tileKind = 'river_shore';
           } else if (curField === 'snowy_forest') {
             tileKind = 'snowy_ground';
           }
@@ -1506,19 +1482,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.drawImage(tileSpr, tx, ty, TILE_WIDTH, TILE_HEIGHT);
 
           // River animated shimmer highlight
-          if (curZone === 'field' && curField === 'river' && c >= maxCol - 3 && hash < 45) {
-            const waveShift = ((sim.ambientTimer * 28 + r * 14 + hash) % (TILE_HEIGHT - 8));
+          if (river === 'water' && hash < 45) {
+            const phase = (sim.ambientTimer * 28 + r * 14 + hash) % (TILE_HEIGHT - 8);
+            const waveShift = (phase + TILE_HEIGHT - 8) % (TILE_HEIGHT - 8);
             ctx.fillStyle = 'rgba(224, 242, 254, 0.55)';
             ctx.fillRect(tx + 18, ty + Math.round(waveShift), 18, 3);
           }
 
-          // Perimeter HD compressed Pine Trees
-          const isRiverEdge = curZone === 'field' && curField === 'river' && c >= maxCol - 3;
-          if (!isRiverEdge && (c === 0 || r === 0 || c === maxCol - 1 || r === maxRow - 1)) {
-            const treeKind: MapTileKind =
-              curZone === 'field' && curField === 'snowy_forest' ? 'tree_snow' : 'tree_green';
-            const treeSpr = getMapTileAsset(treeKind, variant);
-            ctx.drawImage(treeSpr, tx - 6, ty - 14, TILE_WIDTH + 12, TILE_HEIGHT + 18);
+          if (hasSceneryTree(curZone, curField, c, r, VILLAGE_COLS, VILLAGE_ROWS)) {
+            trees.push({ col: c, row: r, variant });
           }
         }
       }
@@ -1541,11 +1513,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.beginPath();
           ctx.arc(lx, ly - 15, 31, 0, Math.PI * 2);
           ctx.fill();
-          ctx.drawImage(lantern, lx - 27, ly - 42, 54, 72);
+          ctx.drawImage(lantern, lx - 36, ly - 42, 72, 72);
         }
 
         const torii = getEntityAsset('village_torii');
-        ctx.drawImage(torii, VILLAGE_WIDTH / 2 - 48, 420 - 38, 96, 68);
+        ctx.drawImage(torii, VILLAGE_WIDTH / 2 - 48, 420 - 62, 96, 96);
         ctx.font = 'bold 11px "Noto Sans KR", sans-serif';
         ctx.textAlign = 'center';
         drawOutlinedText(
@@ -1569,6 +1541,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       type DrawItem = { y: number; draw: () => void };
       const drawList: DrawItem[] = [];
 
+      // Scenery trees are depth-sorted with actors so walking behind them reads naturally.
+      const treeKind: MapTileKind =
+        curZone === 'field' && curField === 'snowy_forest' ? 'tree_snow' : 'tree_green';
+      for (const tree of trees) {
+        const tx = tree.col * TILE_WIDTH;
+        const ty = tree.row * TILE_HEIGHT;
+        drawList.push({
+          y: ty + TILE_HEIGHT - 12,
+          draw: () => {
+            ctx.drawImage(getMapTileAsset(treeKind, tree.variant), tx - 6, ty - 14, TILE_WIDTH + 12, TILE_HEIGHT + 18);
+          },
+        });
+      }
+
       for (const ent of sim.entities) {
         drawList.push({
           y: ent.y,
@@ -1576,7 +1562,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const spr = getEntityAsset(ent.kind, Boolean(ent.revealedBandit));
             const isSmall = ent.kind === 'herb' || ent.kind === 'berry';
             const propSize: Record<string, [number, number]> = {
-              herb: [54, 48], berry: [58, 50], village_shrine: [82, 82],
+              herb: [66, 48], berry: [70, 50], village_shrine: [82, 82],
               village_torii: [88, 78], village_lantern: [54, 72],
               village_chest: [70, 60], snowflake: [46, 54],
               gold_coin: [46, 50], snowflake_pickup: [52, 56],

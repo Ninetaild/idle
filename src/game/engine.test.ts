@@ -7,6 +7,8 @@ import {
   ELITE_ENEMY_TABLE,
   FIELD_EVENT_TABLE,
   FIELD_SPAWN_TABLE,
+  getDifficultyMultiplier,
+  getEliteTable,
   getEnhancePool,
   HERB_GATHER_TABLE,
   rollWeighted,
@@ -17,6 +19,11 @@ import { getVisiblePixelBounds } from './hdAssets';
 import {
   attemptEnhanceCharm,
   imbueCharm,
+  applyAbilities,
+  convertSkill,
+  getSkillMultiplier,
+  scaleReward,
+  FIELD_ENTITY_LIMITS,
   getFieldDifficulty,
   setFieldDifficulty,
   rollSkillMultiplier,
@@ -39,6 +46,7 @@ import {
   canSpawnEntityKind,
   shouldInteractWithBerry,
 } from './logic';
+import { getRiverColumn, isBeyondDespawnRange, pickSpawnPoint, RIVER_PERIOD } from './world';
 import type { WorldEntity } from './types';
 
 test('sprite frame trimming detects visible alpha bounds and ignores transparent padding', () => {
@@ -87,8 +95,8 @@ test('weighted tables match specified probabilities accurately', () => {
   assert.equal(rollWeighted(ANCIENT_STONE_TABLE, () => 0.6).code, 2);
   assert.equal(rollWeighted(ANCIENT_STONE_TABLE, () => 0.9).code, 3);
 
-  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.1).code, 1);
-  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.23).code, 2);
+  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.001).code, 1);
+  assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.009).code, 2);
   assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.5).code, 3);
 });
 
@@ -229,17 +237,18 @@ test('berries are unavailable at 80% HP or above', () => {
   assert.equal(PLAYER_RANGED_ATTACK_COOLDOWN_SEC, 10);
 });
 
-test('a field entity kind cannot spawn when three living instances already exist', () => {
+test('a field entity kind cannot spawn beyond its own limit', () => {
   const herb: WorldEntity = {
     id: 'herb-cap-1', kind: 'herb', name: '알 수 없는 풀', x: 0, y: 0,
     vx: 0, vy: 0, hp: 1, maxHp: 1, dir: 'down', action: 'idle',
     actionTimer: 0, aiTimer: 0, attackCooldown: 0, telegraphTimer: 0,
     hitFlashTimer: 0, koTimer: 0, isHostile: false, isInteractable: true,
   };
-  const threeHerbs = [herb, { ...herb, id: 'herb-cap-2' }, { ...herb, id: 'herb-cap-3' }];
-  assert.equal(canSpawnEntityKind('herb', threeHerbs), false);
-  assert.equal(canSpawnEntityKind('berry', threeHerbs), true);
-  assert.equal(canSpawnEntityKind('herb', threeHerbs.slice(1)), true);
+  const fullHerbs = Array.from({ length: FIELD_ENTITY_LIMITS.herb }, (_, i) => ({ ...herb, id: `herb-cap-${i}` }));
+  assert.equal(canSpawnEntityKind('herb', fullHerbs), false);
+  assert.equal(canSpawnEntityKind('berry', fullHerbs), true);
+  assert.equal(canSpawnEntityKind('herb', fullHerbs.slice(1)), true);
+  assert.equal(FIELD_ENTITY_LIMITS.event_fox_shrine, 1);
 });
 
 test('priority target overrides nearest auto-target until resolved', () => {
@@ -292,9 +301,11 @@ test('ability imprint spends a jewel and grants three distinct abilities with me
   const inventory = { ...createInitialInventory(), jewels: 1 };
   const result = imbueCharm(stats, inventory, () => 0.5);
   assert.equal(result.inventory.jewels, 0);
-  assert.equal(result.stats.abilities?.length, 3);
-  assert.equal(new Set(result.stats.abilities?.map((ability) => ability.id)).size, 3);
-  const values = (result.stats.abilities ?? []).map((ability) => ability.multiplier).sort((a, b) => a - b);
+  assert.deepEqual(result.stats.abilities, [], 'options are not applied until accepted');
+  assert.equal(result.candidate?.length, 3);
+  assert.equal(new Set(result.candidate?.map((ability) => ability.id)).size, 3);
+  assert.deepEqual(applyAbilities(result.stats, result.candidate!).abilities, result.candidate);
+  const values = (result.candidate ?? []).map((ability) => ability.multiplier).sort((a, b) => a - b);
   assert.equal(values[1], 1.3);
 });
 
@@ -321,4 +332,50 @@ test('elite appearance is rolled only by the enemy table at 10 percent', () => {
   assert.equal(rollWeighted(ELITE_ENEMY_TABLE, () => 0.899999).code, 'normal');
   assert.equal(rollWeighted(ELITE_ENEMY_TABLE, () => 0.9).code, 'elite');
   assert.equal(ELITE_ENEMY_TABLE.reduce((sum, entry) => sum + entry.per, 0), 1);
+});
+
+test('replacing max HP options keeps the HP ratio without stacking', () => {
+  const base = { ...createInitialStats(), hp: 50 };
+  const boosted = applyAbilities(base, [{ id: 'max_hp', multiplier: 1.3 }]);
+  assert.equal(boosted.maxHp, 130);
+  assert.equal(boosted.hp, 65);
+  const removed = applyAbilities(boosted, [{ id: 'gold_gain', multiplier: 1.2 }]);
+  assert.equal(removed.maxHp, 100);
+  assert.equal(removed.hp, 50);
+});
+
+test('technique conversion spends a jewel and fixes a random type and multiplier', () => {
+  const inventory = { ...createInitialInventory(), jewels: 2 };
+  const first = convertSkill(createInitialStats(), inventory, () => 0);
+  assert.equal(first.stats.equippedSkill, 'foxfire_burst');
+  assert.equal(getSkillMultiplier(first.stats), 0.7);
+  assert.equal(first.inventory.jewels, 1);
+  const second = convertSkill(first.stats, first.inventory, () => 0.999999);
+  assert.equal(SKILL_DEFINITIONS[second.stats.equippedSkill!].type, 'single');
+  assert.equal(getSkillMultiplier(second.stats), 1.5);
+  assert.equal(convertSkill(second.stats, second.inventory).code, 'insufficient');
+  assert.equal(getSkillMultiplier(createInitialStats()), 0.85);
+});
+
+test('difficulty compounds rewards and elite odds by 1.1 per level', () => {
+  assert.equal(getDifficultyMultiplier(1), 1);
+  assert.ok(Math.abs(getDifficultyMultiplier(3) - 1.21) < 1e-9);
+  assert.ok(Math.abs(getEliteTable(1)[1].per - 0.1) < 1e-9);
+  assert.ok(Math.abs(getEliteTable(10)[1].per - 0.1 * 1.1 ** 9) < 1e-9);
+  assert.equal(scaleReward(1, 1.1, () => 0.05), 2);
+  assert.equal(scaleReward(1, 1.1, () => 0.5), 1);
+  const peddler = resolveFieldEvent(createInitialStats(), createInitialInventory(), 5, Math.random, getDifficultyMultiplier(3));
+  assert.equal(peddler.stats.gold, createInitialStats().gold + 22);
+});
+
+test('the endless world repeats the river and recycles distant entities', () => {
+  for (let col = -40; col < 40; col++) assert.equal(getRiverColumn(col), getRiverColumn(col + RIVER_PERIOD));
+  assert.equal(getRiverColumn(0), 'land');
+  const view = { width: 1200, height: 700 };
+  for (let i = 0; i < 200; i++) {
+    const point = pickSpawnPoint(-5000, 9000, view, true);
+    assert.ok(Math.abs(point.x + 5000) > 600 || Math.abs(point.y - 9000) > 350);
+    assert.equal(isBeyondDespawnRange(-5000, 9000, point.x, point.y, view), false);
+  }
+  assert.equal(isBeyondDespawnRange(0, 0, 5000, 0, view), true);
 });

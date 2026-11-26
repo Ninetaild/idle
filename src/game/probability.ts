@@ -40,6 +40,15 @@ export function rollWeighted<TCode extends number | string>(
   return entries[entries.length - 1];
 }
 
+export const MAX_FIELD_DIFFICULTY = 10;
+export const DIFFICULTY_STEP_MULTIPLIER = 1.1;
+
+/** Compounding 1.1x per field difficulty level above 1 (rewards and elite odds). */
+export function getDifficultyMultiplier(level: number): number {
+  const clamped = Math.max(1, Math.min(MAX_FIELD_DIFFICULTY, Math.floor(level)));
+  return Math.pow(DIFFICULTY_STEP_MULTIPLIER, clamped - 1);
+}
+
 // ============================================================================
 // Reusable Game Probability Tables
 // ============================================================================
@@ -108,6 +117,16 @@ export const ELITE_ENEMY_TABLE: readonly WeightedEntry<'normal' | 'elite'>[] = [
   { code: 'normal', text: '일반 적', per: 0.9 },
   { code: 'elite', text: '강적', per: 0.1 },
 ];
+
+/** Elite odds grow 1.1x for every field difficulty level above 1. */
+export function getEliteTable(difficultyLevel: number): readonly WeightedEntry<'normal' | 'elite'>[] {
+  const base = ELITE_ENEMY_TABLE.find((entry) => entry.code === 'elite')!.per;
+  const elite = Math.min(1, base * getDifficultyMultiplier(difficultyLevel));
+  return [
+    { code: 'normal', text: '일반 적', per: 1 - elite },
+    { code: 'elite', text: '강적', per: elite },
+  ];
+}
 
 export const YOKAI_SPECIES_TABLE: readonly WeightedEntry<1 | 2 | 3 | 4 | 5 | 6>[] = [
   { code: 1, text: '붉은 도깨비가 쇠방망이를 들고 나타났다!', per: 0.22 },

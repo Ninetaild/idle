@@ -12,7 +12,9 @@ import { VillageModals } from './components/VillageModals';
 import {
   attemptEnhanceCharm,
   imbueCharm,
-  changeEquippedSkill,
+  applyAbilities,
+  formatAbilities,
+  convertSkill,
   setFieldDifficulty,
   craftElixirFromHerb,
   createInitialInventory,
@@ -26,6 +28,7 @@ import {
 import { soundEngine } from './game/sound';
 import { decryptSave, encryptSave } from './game/saveCodec';
 import type {
+  AbilityRoll,
   FieldId,
   GameScreenState,
   GameSnapshot,
@@ -98,6 +101,12 @@ export default function App() {
 
   const [activeStation, setActiveStation] = useState<VillageStationId | null>(null);
   const [stationResultText, setStationResultText] = useState<string | null>(null);
+
+  // Not persisted: closing the window or reloading keeps the previous options.
+  const [pendingAbilities, setPendingAbilities] = useState<AbilityRoll[] | null>(null);
+  useEffect(() => {
+    setPendingAbilities(null);
+  }, [activeStation]);
 
   const logIdRef = useRef(1);
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -290,16 +299,42 @@ export default function App() {
     else soundEngine.playPickup();
   };
 
-  const handleImbueCharm = () => {
-    const outcome = imbueCharm(stats, inventory);
-    setStats(outcome.stats); setInventory(outcome.inventory);
-    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
-    setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
-    if (outcome.code === 'imbued') soundEngine.playElixir();
+  const commitAbilities = (baseStats: PlayerStats, nextInventory: Inventory, abilities: AbilityRoll[]) => {
+    const nextStats = applyAbilities(baseStats, abilities);
+    const message = `옵션 적용: ${formatAbilities(abilities)}`;
+    setStats(nextStats); setInventory(nextInventory);
+    engineRef.current?.syncExternalState(nextStats, nextInventory);
+    setPendingAbilities(null);
+    setStationResultText(message); pushLog(message, 'positive');
   };
 
-  const handleChangeSkill = (skill: import('./game/types').SkillId) => {
-    const outcome = changeEquippedSkill(stats, inventory, skill);
+  const handleImbueCharm = () => {
+    if (pendingAbilities) return;
+    const outcome = imbueCharm(stats, inventory);
+    if (outcome.candidate) soundEngine.playElixir();
+    // With nothing to revert to, the first imprint applies immediately.
+    if (outcome.candidate && !stats.abilities?.length) {
+      commitAbilities(outcome.stats, outcome.inventory, outcome.candidate);
+      return;
+    }
+    setInventory(outcome.inventory);
+    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
+    setPendingAbilities(outcome.candidate);
+    setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
+  };
+
+  const handleKeepAbilities = () => {
+    setPendingAbilities(null);
+    const message = '이전 옵션으로 되돌렸습니다.';
+    setStationResultText(message); pushLog(message, 'neutral');
+  };
+
+  const handleAcceptAbilities = () => {
+    if (pendingAbilities) commitAbilities(stats, inventory, pendingAbilities);
+  };
+
+  const handleConvertSkill = () => {
+    const outcome = convertSkill(stats, inventory);
     setStats(outcome.stats); setInventory(outcome.inventory);
     engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
     setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
@@ -452,7 +487,10 @@ export default function App() {
         onSellHerbs={handleSellHerbs}
         onEnhanceCharm={handleEnhanceCharm}
         onImbueCharm={handleImbueCharm}
-        onChangeSkill={handleChangeSkill}
+        onConvertSkill={handleConvertSkill}
+        pendingAbilities={pendingAbilities}
+        onKeepAbilities={handleKeepAbilities}
+        onAcceptAbilities={handleAcceptAbilities}
         onSetFieldDifficulty={handleSetFieldDifficulty}
         onBuyWinterSkin={handleBuyWinterSkin}
         onEquipSkin={handleEquipSkin}
