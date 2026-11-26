@@ -706,6 +706,8 @@ export function getEntityAsset(
     if (gatherable) return gatherable;
   }
 
+  // field_props_atlas.svg is 768×512: six 128×256 cells per row,
+  // with the second row beginning at y=256. Do not treat it as a 96×96 atlas.
   const propIndex: Record<string, number> = {
     village_shrine: 2, village_torii: 4, village_lantern: 5,
     village_chest: 6, snowflake: 7, gold_coin: 8,
@@ -715,8 +717,8 @@ export function getEntityAsset(
     const propIndexValue = propIndex[kind];
     const prop = getSvgAtlasFrame(
       'assets/sprites/field_props_atlas.svg',
-      96,
-      96,
+      128,
+      256,
       propIndexValue % 6,
       Math.floor(propIndexValue / 6),
       96,
