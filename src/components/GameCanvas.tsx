@@ -542,6 +542,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (i === 0) {
           ent.kind = 'herb';
           ent.name = '알 수 없는 풀';
+          ent.hp = 1;
+          ent.maxHp = 1;
+          ent.revealedBandit = false;
           ent.isHostile = false;
           ent.isInteractable = true;
           ent.isElite = false;
@@ -551,6 +554,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         } else if (i === 1) {
           ent.kind = 'berry';
           ent.name = '알 수 없는 열매';
+          ent.hp = 1;
+          ent.maxHp = 1;
+          ent.revealedBandit = false;
           ent.isHostile = false;
           ent.isInteractable = true;
           ent.isElite = false;
