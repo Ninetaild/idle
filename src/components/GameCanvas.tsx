@@ -15,6 +15,9 @@ import {
   canSpawnEntityKind,
   shouldInteractWithBerry,
   PLAYER_RANGED_ATTACK_COOLDOWN_SEC,
+  getAbilityMultiplier,
+  getFieldDifficulty,
+  SKILL_DEFINITIONS,
 } from '../game/logic';
 import {
   FIELD_EVENT_TABLE,
@@ -320,7 +323,8 @@ function spawnRandomFieldEntity(
   playerX: number,
   playerY: number,
   fieldId: FieldId,
-  existingEntities: readonly WorldEntity[] = []
+  existingEntities: readonly WorldEntity[] = [],
+  difficultyLevel = 1
 ): WorldEntity | null {
   const bounds = getPlayableFieldBounds(fieldId);
   for (let spawnAttempt = 0; spawnAttempt < 16; spawnAttempt++) {
@@ -358,6 +362,15 @@ function spawnRandomFieldEntity(
       candidate = createEventByCode(base, rollWeighted(FIELD_EVENT_TABLE).code);
     }
 
+    if (candidate.isHostile) {
+      const levelScale = 1 + (Math.max(1, Math.min(10, difficultyLevel)) - 1) * 0.18;
+      const isElite = Math.random() < 0.1;
+      candidate.maxHp = Math.round(candidate.maxHp * levelScale * (isElite ? 3 : 1));
+      candidate.hp = candidate.maxHp;
+      candidate.damageMultiplier = levelScale * (isElite ? 1.6 : 1);
+      candidate.isElite = isElite;
+      if (isElite) candidate.name = `강적 · ${candidate.name}`;
+    }
     if (canSpawnEntityKind(candidate.kind, existingEntities)) return candidate;
   }
   return null;
@@ -497,7 +510,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       const seeded: WorldEntity[] = [];
       for (let i = 0; i < 12; i++) {
-        const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded);
+        const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded, getFieldDifficulty(sim.stats, fieldId));
         if (!ent) continue;
         if (i === 0) {
           ent.kind = 'herb';
@@ -717,8 +730,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           fairy_sylph: 18,
           event_bandit: 26,
         };
-        const goldDrop = goldTable[ent.kind] ?? 18;
+        const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getAbilityMultiplier(sim.stats, 'gold_gain'));
         sim.stats.gold += goldDrop;
+        if (ent.isElite) {
+          sim.inventory = { ...sim.inventory, eventTokens: (sim.inventory.eventTokens ?? 0) + 1, jewels: (sim.inventory.jewels ?? 0) + 1 };
+          propsRef.current.onLog('강적을 정화해 이벤트 재화 1개와 보옥 1개를 확정 획득했습니다!', 'positive');
+        }
         sim.stats.totalDefeated += 1;
         emitParticles(ent.x, ent.y, '#f87171', 16, 90);
         propsRef.current.onLog(
@@ -739,13 +756,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const p = sim.player;
       if (p.attackCooldown > 0) return;
 
-      p.attackCooldown = 0.52;
+      p.attackCooldown = 0.52 / getAbilityMultiplier(sim.stats, 'attack_frequency');
       p.auraPulseTimer = 0.26;
       soundEngine.playSwing();
 
       const dx = target.x - p.x;
       const dy = target.y - p.y;
-      damageEnemy(target, sim.stats.attackPower, dx, dy);
+      damageEnemy(target, sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power'), dx, dy);
     };
 
     const damagePlayer = (dmg: number, knockX: number, knockY: number) => {
@@ -1169,7 +1186,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         sim.spawnTimer -= dt;
         if (sim.spawnTimer <= 0 && aliveCount < 13) {
           sim.spawnTimer = 2.4;
-          const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities);
+          const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities, getFieldDifficulty(sim.stats, curField));
           if (spawned) sim.entities.push(spawned);
         }
 
@@ -1226,7 +1243,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 ent.vy += (dy / dist) * 165;
                 ent.attackCooldown = 1.6;
                 if (dist < 44) {
-                  damagePlayer(ent.kind === 'event_bandit' ? 11 : 13, dx, dy);
+                  damagePlayer((ent.kind === 'event_bandit' ? 11 : 13) * (ent.damageMultiplier ?? 1), dx, dy);
                 }
               }
             } else if (dist > 38 && dist < 260) {
@@ -1257,7 +1274,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 y: ent.y,
                 vx: (dx / dist) * (ent.kind === 'yokai_tengu' ? 145 : 120),
                 vy: (dy / dist) * (ent.kind === 'yokai_tengu' ? 145 : 120),
-                damage: ent.kind === 'yokai_tengu' ? 11 : 8,
+                damage: (ent.kind === 'yokai_tengu' ? 11 : 8) * (ent.damageMultiplier ?? 1),
                 life: 2.0,
               });
             }
@@ -1291,7 +1308,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   y: ent.y,
                   vx: (dx / dist) * 140,
                   vy: (dy / dist) * 140,
-                  damage: ent.kind === 'yokai_yukionna' ? 13 : 11,
+                  damage: (ent.kind === 'yokai_yukionna' ? 13 : 11) * (ent.damageMultiplier ?? 1),
                   life: 2.1,
                 });
               }
@@ -1311,7 +1328,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // Ranged spirit shot has its own cooldown, separate from close-range purification.
+      // The existing ranged cooldown activates the currently equipped technique.
       if (curZone === 'field' && p.rangedCooldown <= 0 && !immobilized) {
         let target: WorldEntity | null = null;
         let nearest = Infinity;
@@ -1321,18 +1338,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (distance < nearest) { nearest = distance; target = entity; }
         }
         if (target && nearest <= 280) {
+          const skill = SKILL_DEFINITIONS[sim.stats.equippedSkill ?? 'foxfire_burst'];
           const dx = target.x - p.x;
           const dy = target.y - p.y;
           const distance = Math.max(1, Math.hypot(dx, dy));
-          const speed = 250;
+          const speed = 250 * getAbilityMultiplier(sim.stats, 'attack_speed');
           sim.projectiles.push({
-            id: nextId('p-proj'), owner: 'player', kind: 'foxfire',
+            id: nextId('p-proj'), owner: 'player',
+            kind: skill.name === '빙결의 고리' ? 'ice' : skill.name === '풍신참' ? 'wind' : 'foxfire',
             x: p.x, y: p.y - 8,
             vx: (dx / distance) * speed, vy: (dy / distance) * speed,
-            damage: sim.stats.attackPower, life: 1.4,
+            damage: sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power') * skill.multiplier,
+            life: 1.4, splashRadius: skill.type === 'area' ? 92 : 0, skillName: skill.name,
           });
-          p.rangedCooldown = PLAYER_RANGED_ATTACK_COOLDOWN_SEC;
+          p.rangedCooldown = PLAYER_RANGED_ATTACK_COOLDOWN_SEC / getAbilityMultiplier(sim.stats, 'attack_frequency');
           p.auraPulseTimer = 0.26;
+          propsRef.current.onLog(`${skill.name} 발동!`, 'combat');
           soundEngine.playSwing();
         }
       }
@@ -1353,6 +1374,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           );
           if (hitTarget) {
             damageEnemy(hitTarget, proj.damage, proj.vx, proj.vy);
+            if (proj.splashRadius && proj.splashRadius > 0) {
+              for (const nearby of sim.entities) {
+                if (nearby.id === hitTarget.id || !nearby.isHostile || nearby.hp <= 0 || nearby.koTimer > 0) continue;
+                if (Math.hypot(nearby.x - hitTarget.x, nearby.y - hitTarget.y) <= proj.splashRadius) damageEnemy(nearby, proj.damage, proj.vx, proj.vy);
+              }
+              emitParticles(hitTarget.x, hitTarget.y, '#93c5fd', 18, 96);
+            }
             sim.projectiles.splice(i, 1);
           }
         } else if (Math.hypot(p.x - proj.x, p.y - proj.y) < 18) {
@@ -1548,6 +1576,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.ellipse(ent.x, ent.y + halfH * 0.65, halfW * 0.55, 6, 0, 0, Math.PI * 2);
             ctx.fill();
 
+            if (ent.isElite) {
+              const pulse = 0.6 + Math.sin(sim.ambientTimer * 4) * 0.15;
+              ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`;
+              ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(ent.x, ent.y + 2, halfW * 0.8 + 8, 0, Math.PI * 2); ctx.stroke();
+              ctx.font = 'bold 11px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center';
+              drawOutlinedText(ctx, '강적', ent.x, ent.y - halfH - 12, '#fde047');
+            }
             if (ent.telegraphTimer > 0) {
               ctx.strokeStyle = '#ef4444';
               ctx.lineWidth = 2;
