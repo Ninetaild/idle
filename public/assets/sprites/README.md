@@ -19,4 +19,4 @@ Character rows: front, back, left, right. Character columns: idle, step A, step 
 Enemy sprites use procedural walk, idle-breathing, hover, hit and defeat motion in-game. Hold `Ctrl` and scroll the mouse wheel over the game viewport to zoom; the range is clamped to three steps in either direction.
 
 
-Gatherable asset paths are resolved independently in `src/game/hdAssets.ts`: `herb` → `assets/sprites/field_gatherable_herb.svg`, `berry` → `assets/sprites/field_gatherable_berry.svg`. Both files are standalone SVG vector artwork extracted from the corresponding source-art groups, with one object centered in a transparent 96×96 viewBox. Runtime output is 96×68 to match the field entity footprint.
+Gatherable asset paths are resolved independently in `src/game/hdAssets.ts`: `herb` → `assets/sprites/field_gatherable_herb.svg`, `berry` → `assets/sprites/field_gatherable_berry.svg`. Both files are standalone hand-authored SVG vector artwork with one object centered in a transparent 96×96 viewBox. The previous extracted art was replaced because its source contained visible background artifacts. Runtime output is 96×68 to match the field entity footprint.
