@@ -55,7 +55,7 @@ function loadSavedData(): SavedData | null {
     const parsed = JSON.parse(raw) as Partial<SavedData>;
     if (!parsed.stats || !parsed.inventory) return null;
     return {
-      stats: { ...createInitialStats(), ...parsed.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties, ...parsed.stats.fieldDifficulties }, abilities: parsed.stats.abilities ?? [], equippedSkill: parsed.stats.equippedSkill ?? 'foxfire_burst' },
+      stats: { ...createInitialStats(), ...parsed.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties!, ...parsed.stats.fieldDifficulties }, abilities: parsed.stats.abilities ?? [], equippedSkill: parsed.stats.equippedSkill ?? 'foxfire_burst' },
       inventory: { ...createInitialInventory(), ...parsed.inventory },
       // Always resume in the village after a browser restart.
       // Keep the saved field selection for the next walk.
@@ -346,7 +346,7 @@ export default function App() {
     if (!saved.stats || !saved.inventory) {
       throw new Error('저장 데이터에 필수 정보가 없습니다.');
     }
-    const nextStats = { ...createInitialStats(), ...saved.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties, ...saved.stats.fieldDifficulties }, abilities: saved.stats.abilities ?? [], equippedSkill: saved.stats.equippedSkill ?? 'foxfire_burst' };
+    const nextStats = { ...createInitialStats(), ...saved.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties!, ...saved.stats.fieldDifficulties }, abilities: saved.stats.abilities ?? [], equippedSkill: saved.stats.equippedSkill ?? 'foxfire_burst' };
     const nextInventory = { ...createInitialInventory(), ...saved.inventory };
     setStats(nextStats);
     setInventory(nextInventory);
