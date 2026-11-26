@@ -214,12 +214,26 @@ export const ABILITY_LABELS: Record<AbilityId, string> = {
   attack_frequency: '공격 내부 쿨다운 감소', attack_speed: '공격 속도',
 };
 
-export const SKILL_DEFINITIONS: Record<SkillId, { name: string; type: 'area' | 'single'; multiplier: number; description: string }> = {
-  foxfire_burst: { name: '여우불 폭발', type: 'area', multiplier: 0.85, description: '주변 적에게 함께 피해를 주는 범위 기술' },
-  purification_bolt: { name: '퇴마의 화살', type: 'single', multiplier: 1.35, description: '한 대상에게 강한 피해를 주는 단일 기술' },
-  frost_ring: { name: '빙결의 고리', type: 'area', multiplier: 1.0, description: '넓은 범위에 서리 피해를 주는 기술' },
-  wind_slash: { name: '풍신참', type: 'single', multiplier: 1.5, description: '한 대상에게 큰 피해를 주는 단일 기술' },
+export interface SkillDefinition {
+  name: string;
+  type: 'area' | 'single';
+  minMultiplier: number;
+  maxMultiplier: number;
+  description: string;
+}
+
+export const SKILL_DEFINITIONS: Record<SkillId, SkillDefinition> = {
+  foxfire_burst: { name: '여우불 폭발', type: 'area', minMultiplier: 0.7, maxMultiplier: 1.0, description: '주변 적에게 함께 피해를 주는 범위 기술' },
+  purification_bolt: { name: '퇴마의 화살', type: 'single', minMultiplier: 1.2, maxMultiplier: 1.5, description: '한 대상에게 강한 피해를 주는 단일 기술' },
+  frost_ring: { name: '빙결의 고리', type: 'area', minMultiplier: 0.7, maxMultiplier: 1.0, description: '넓은 범위에 서리 피해를 주는 기술' },
+  wind_slash: { name: '풍신참', type: 'single', minMultiplier: 1.2, maxMultiplier: 1.5, description: '한 대상에게 큰 피해를 주는 단일 기술' },
 };
+
+export function rollSkillMultiplier(skillId: SkillId, rng: () => number = Math.random): number {
+  const skill = SKILL_DEFINITIONS[skillId];
+  const roll = Math.max(0, Math.min(0.999999999, rng()));
+  return Number((skill.minMultiplier + (skill.maxMultiplier - skill.minMultiplier) * roll).toFixed(2));
+}
 
 export function getAbilityMultiplier(stats: PlayerStats, id: AbilityId): number {
   return stats.abilities?.find((ability) => ability.id === id)?.multiplier ?? 1;
