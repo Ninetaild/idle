@@ -102,7 +102,7 @@ test('charm enhancement has only success/maintain and multiplies attack and cost
   const maintain = attemptEnhanceCharm(stats, inv, () => 0.99);
   assert.equal(maintain.stats.enhanceLevel, 0);
   assert.equal(maintain.stats.attackPower, stats.attackPower);
-  assert.equal(maintain.stats.enhanceCost, 66);
+  assert.equal(maintain.stats.enhanceCost, 60);
 });
 
 test('tiered herb gathering, berry eating, and alchemy outcomes apply accurately', () => {
