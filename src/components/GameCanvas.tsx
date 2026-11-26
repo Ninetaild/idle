@@ -1466,7 +1466,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         ];
         const lantern = getEntityAsset('village_lantern');
         for (const [lx, ly] of lanterns) {
-          ctx.drawImage(lantern, lx - 24, ly - 34, 48, 48);
+          const glow = 0.18 + (Math.sin(sim.ambientTimer * 2.4 + lx * 0.03) + 1) * 0.08;
+          const halo = ctx.createRadialGradient(lx, ly - 15, 2, lx, ly - 15, 31);
+          halo.addColorStop(0, `rgba(255, 190, 74, ${glow})`);
+          halo.addColorStop(1, 'rgba(255, 165, 60, 0)');
+          ctx.fillStyle = halo;
+          ctx.beginPath();
+          ctx.arc(lx, ly - 15, 31, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.drawImage(lantern, lx - 27, ly - 42, 54, 72);
         }
 
         const torii = getEntityAsset('village_torii');
@@ -1500,23 +1508,38 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           draw: () => {
             const spr = getEntityAsset(ent.kind, Boolean(ent.revealedBandit));
             const isSmall = ent.kind === 'herb' || ent.kind === 'berry';
-            const drawW = isSmall ? 54 : 74;
-            const drawH = isSmall ? 38 : 52;
+            const propSize: Record<string, [number, number]> = {
+              herb: [54, 48], berry: [58, 50], village_shrine: [82, 82],
+              village_torii: [88, 78], village_lantern: [54, 72],
+              village_chest: [70, 60], snowflake: [46, 54],
+              gold_coin: [46, 50], snowflake_pickup: [52, 56],
+              snowflake_crystal: [50, 62], village_sign: [62, 72],
+            };
+            const size = propSize[ent.kind];
+            const drawW = size?.[0] ?? (isSmall ? 54 : 74);
+            const drawH = size?.[1] ?? (isSmall ? 48 : 52);
             const halfW = drawW / 2;
             const halfH = drawH / 2;
             const animTime = ent.animTimer ?? sim.ambientTimer;
             const isFlying = ent.kind === 'fairy_sylph' || ent.kind === 'yokai_tengu';
+            const isPlant = ent.kind === 'herb' || ent.kind === 'berry';
+            const isPickup = ent.kind === 'snowflake' || ent.kind === 'gold_coin' ||
+              ent.kind === 'snowflake_pickup' || ent.kind === 'snowflake_crystal';
             const walkCycle = animTime * (isFlying ? 10 : 13) + ent.x * 0.035;
+            const idleBob = Math.sin(animTime * 2.2 + ent.x * 0.02) * 1.2;
             const bob = isFlying
               ? Math.sin(walkCycle) * 4
-              : ent.isMoving
-                ? Math.abs(Math.sin(walkCycle)) * -3.5
-                : Math.sin(animTime * 2.2 + ent.x * 0.02) * 1.2;
+              : isPickup
+                ? Math.sin(animTime * 2.8 + ent.x * 0.025) * 2.8
+                : ent.isMoving
+                  ? Math.abs(Math.sin(walkCycle)) * -3.5
+                  : idleBob;
             const koOffsetY = ent.koTimer > 0 ? (0.35 - ent.koTimer) * 18 : 0;
             const stride = ent.isMoving && ent.koTimer <= 0;
             const squash = stride ? 1 + Math.sin(walkCycle * 2) * 0.045 : 1 + Math.sin(animTime * 2) * 0.012;
             const stretch = stride ? 1 - Math.sin(walkCycle * 2) * 0.035 : 1;
-            const lean = ent.koTimer > 0 ? 0.22 : stride ? Math.sin(walkCycle) * 0.075 : Math.sin(animTime * 1.6) * 0.012;
+            const plantSway = isPlant ? Math.sin(animTime * 1.35 + ent.x * 0.04) * 0.035 : 0;
+            const lean = ent.koTimer > 0 ? 0.22 : stride ? Math.sin(walkCycle) * 0.075 : Math.sin(animTime * 1.6) * 0.012 + plantSway;
 
             ctx.save();
             if (ent.koTimer > 0) {
@@ -1548,9 +1571,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               );
             }
 
-            // Transform around the feet/ground anchor: enemies now face their
-            // horizontal travel direction and have a looping walk/breath cycle.
+            // Props keep a grounded footprint; plants sway gently and pickups float.
             ctx.save();
+            if (isPickup && ent.koTimer <= 0) {
+              const glowRadius = 19 + Math.sin(animTime * 3.1) * 2;
+              const glow = ctx.createRadialGradient(ent.x, ent.y - halfH * 0.45 + bob, 1, ent.x, ent.y - halfH * 0.45 + bob, glowRadius);
+              const glowColor = ent.kind === 'gold_coin'
+                ? 'rgba(255, 198, 66, 0.20)'
+                : 'rgba(116, 190, 255, 0.18)';
+              glow.addColorStop(0, glowColor);
+              glow.addColorStop(1, 'rgba(116, 190, 255, 0)');
+              ctx.fillStyle = glow;
+              ctx.beginPath();
+              ctx.arc(ent.x, ent.y - halfH * 0.45 + bob, glowRadius, 0, Math.PI * 2);
+              ctx.fill();
+            }
             ctx.translate(ent.x, ent.y + bob + koOffsetY);
             ctx.rotate(lean);
             ctx.scale(ent.dir === 'left' ? -squash : squash, stretch);

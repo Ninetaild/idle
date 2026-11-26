@@ -711,7 +711,7 @@ export function getEntityAsset(
       propIndexValue % 6,
       Math.floor(propIndexValue / 6),
       96,
-      68
+      96
     );
     if (prop) return prop;
   }
