@@ -696,11 +696,20 @@ export function getEntityAsset(
     );
     if (enemy) return enemy;
   }
+  const gatherablePath: Partial<Record<string, string>> = {
+    herb: 'assets/sprites/field_gatherable_herb.svg',
+    berry: 'assets/sprites/field_gatherable_berry.svg',
+  };
+  const gatherableSvg = gatherablePath[kind];
+  if (gatherableSvg) {
+    const gatherable = getSvgAtlasFrame(gatherableSvg, 96, 96, 0, 0, 96, 68);
+    if (gatherable) return gatherable;
+  }
+
   const propIndex: Record<string, number> = {
-    herb: 0, berry: 1, village_shrine: 2, village_torii: 4,
-    village_lantern: 5, village_chest: 6, snowflake: 7,
-    gold_coin: 8, snowflake_pickup: 9, snowflake_crystal: 10,
-    village_sign: 11,
+    village_shrine: 2, village_torii: 4, village_lantern: 5,
+    village_chest: 6, snowflake: 7, gold_coin: 8,
+    snowflake_pickup: 9, snowflake_crystal: 10, village_sign: 11,
   };
   if (kind in propIndex) {
     const propIndexValue = propIndex[kind];
