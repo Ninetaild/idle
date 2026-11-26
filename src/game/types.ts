@@ -13,7 +13,8 @@ export type Direction = 'up' | 'down' | 'left' | 'right';
 
 export type ActorAction = 'idle' | 'walk' | 'pickup' | 'hurt';
 
-export type EntityKind =
+/** Field-only entities: gatherables, hostile yokai and non-hostile encounters. */
+export type FieldEntityKind =
   | 'herb'
   | 'berry'
   | 'yokai_dokkaebi'
@@ -26,10 +27,15 @@ export type EntityKind =
   | 'event_bandit'
   | 'event_fox_shrine'
   | 'event_ancient_stone'
-  | 'event_peddler'
+  | 'event_peddler';
+
+/** Village-only landmarks and service stations, never spawned in field tables. */
+export type VillageEntityKind =
   | 'village_cauldron'
   | 'village_merchant'
   | 'village_event_shop';
+
+export type EntityKind = FieldEntityKind | VillageEntityKind;
 
 export interface Inventory {
   herbs: number;       // 알 수 없는 풀
