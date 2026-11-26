@@ -26,6 +26,16 @@ export const ECONOMY_PRICES = {
 } as const;
 
 export const STOMACHACHE_DURATION_SEC = 2;
+export const PLAYER_RANGED_ATTACK_COOLDOWN_SEC = 10;
+export const MAX_FIELD_ENTITY_KIND_COUNT = 3;
+
+export function canSpawnEntityKind(kind: WorldEntity['kind'], entities: readonly WorldEntity[], maxCount = MAX_FIELD_ENTITY_KIND_COUNT): boolean {
+  return entities.filter((entity) => entity.kind === kind && entity.hp > 0 && entity.koTimer <= 0).length < maxCount;
+}
+
+export function shouldInteractWithBerry(hp: number, maxHp: number): boolean {
+  return maxHp > 0 && hp / maxHp < 0.8;
+}
 
 export const FIELD_METADATA: Record<
   FieldId,
@@ -518,11 +528,12 @@ export function selectAutoOrPriorityTarget(
   playerX: number,
   playerY: number,
   entities: readonly WorldEntity[],
-  priorityTargetId: string | null
+  priorityTargetId: string | null,
+  allowBerry = true
 ): WorldEntity | null {
   if (priorityTargetId) {
     const prioritized = entities.find(
-      (e) => e.id === priorityTargetId && e.koTimer <= 0 && e.hp > 0
+      (e) => e.id === priorityTargetId && e.koTimer <= 0 && e.hp > 0 && (allowBerry || e.kind !== 'berry')
     );
     if (prioritized) {
       return prioritized;
@@ -534,6 +545,7 @@ export function selectAutoOrPriorityTarget(
 
   for (const entity of entities) {
     if (entity.koTimer > 0 || entity.hp <= 0) continue;
+    if (!allowBerry && entity.kind === 'berry') continue;
     if (!entity.isHostile && !entity.isInteractable) continue;
     const dx = entity.x - playerX;
     const dy = entity.y - playerY;

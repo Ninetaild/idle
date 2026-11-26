@@ -12,6 +12,9 @@ import {
   resolveFieldEvent,
   rollSnowflakeDrop,
   selectAutoOrPriorityTarget,
+  canSpawnEntityKind,
+  shouldInteractWithBerry,
+  PLAYER_RANGED_ATTACK_COOLDOWN_SEC,
 } from '../game/logic';
 import {
   FIELD_EVENT_TABLE,
@@ -315,59 +318,48 @@ function createEventByCode(
 function spawnRandomFieldEntity(
   playerX: number,
   playerY: number,
-  fieldId: FieldId
-): WorldEntity {
-  const rolled = rollWeighted(FIELD_SPAWN_TABLE);
+  fieldId: FieldId,
+  existingEntities: readonly WorldEntity[] = []
+): WorldEntity | null {
   const bounds = getPlayableFieldBounds(fieldId);
-  let x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-  let y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const dx = x - playerX;
-    const dy = y - playerY;
-    if (dx * dx + dy * dy > 80 * 80) break;
-    x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
-    y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
-  }
+  for (let spawnAttempt = 0; spawnAttempt < 16; spawnAttempt++) {
+    const rolled = rollWeighted(FIELD_SPAWN_TABLE);
+    let x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+    let y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const dx = x - playerX;
+      const dy = y - playerY;
+      if (dx * dx + dy * dy > 80 * 80) break;
+      x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+      y = bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+    }
 
-  const base: WorldEntity = {
-    id: nextId('ent'),
-    kind: 'herb',
-    name: '알 수 없는 풀',
-    x,
-    y,
-    vx: 0,
-    vy: 0,
-    hp: 1,
-    maxHp: 1,
-    dir: 'down',
-    action: 'idle',
-    actionTimer: 0,
-    aiTimer: Math.random() * 2,
-    attackCooldown: 0.9 + Math.random() * 0.7,
-    telegraphTimer: 0,
-    hitFlashTimer: 0,
-    koTimer: 0,
-    isHostile: false,
-    isInteractable: true,
-    orbitAngle: Math.random() * Math.PI * 2,
-    snowDusted: fieldId === 'snowy_forest',
-  };
+    const base: WorldEntity = {
+      id: nextId('ent'), kind: 'herb', name: '알 수 없는 풀', x, y, vx: 0, vy: 0,
+      hp: 1, maxHp: 1, dir: 'down', action: 'idle', actionTimer: 0,
+      aiTimer: Math.random() * 2, attackCooldown: 0.9 + Math.random() * 0.7,
+      telegraphTimer: 0, hitFlashTimer: 0, koTimer: 0,
+      isHostile: false, isInteractable: true, orbitAngle: Math.random() * Math.PI * 2,
+      snowDusted: fieldId === 'snowy_forest',
+    };
 
-  if (rolled.code === 1) {
-    return { ...base, kind: 'berry', name: '알 수 없는 열매' };
-  }
-  if (rolled.code === 2) {
-    return { ...base, kind: 'herb', name: '알 수 없는 풀' };
-  }
-  if (rolled.code === 3) {
-    let speciesCode = rollWeighted(YOKAI_SPECIES_TABLE).code;
-    if (fieldId === 'river' && Math.random() < 0.4) speciesCode = 5;
-    if (fieldId === 'snowy_forest' && Math.random() < 0.4) speciesCode = 6;
-    return createYokaiByCode(base, speciesCode);
-  }
+    let candidate: WorldEntity;
+    if (rolled.code === 1) {
+      candidate = { ...base, kind: 'berry', name: '알 수 없는 열매' };
+    } else if (rolled.code === 2) {
+      candidate = { ...base, kind: 'herb', name: '알 수 없는 풀' };
+    } else if (rolled.code === 3) {
+      let speciesCode = rollWeighted(YOKAI_SPECIES_TABLE).code;
+      if (fieldId === 'river' && Math.random() < 0.4) speciesCode = 5;
+      if (fieldId === 'snowy_forest' && Math.random() < 0.4) speciesCode = 6;
+      candidate = createYokaiByCode(base, speciesCode);
+    } else {
+      candidate = createEventByCode(base, rollWeighted(FIELD_EVENT_TABLE).code);
+    }
 
-  const ev = rollWeighted(FIELD_EVENT_TABLE);
-  return createEventByCode(base, ev.code);
+    if (canSpawnEntityKind(candidate.kind, existingEntities)) return candidate;
+  }
+  return null;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -424,6 +416,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       actionTimer: 0,
       walkPhase: 0,
       attackCooldown: 0,
+      rangedCooldown: 0,
       auraPulseTimer: 0,
       invulnTimer: 0,
       hitFlashTimer: 0,
@@ -500,7 +493,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       const seeded: WorldEntity[] = [];
       for (let i = 0; i < 12; i++) {
-        const ent = spawnRandomFieldEntity(startX, startY, fieldId);
+        const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded);
+        if (!ent) continue;
         if (i === 0) {
           ent.kind = 'herb';
           ent.name = '알 수 없는 풀';
@@ -786,6 +780,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       if (ent.kind === 'berry') {
+        if (!shouldInteractWithBerry(sim.stats.hp, sim.stats.maxHp)) return;
         p.action = 'pickup';
         p.actionTimer = 0.28;
         ent.hp = 0;
@@ -1009,6 +1004,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const p = sim.player;
 
       if (p.attackCooldown > 0) p.attackCooldown = Math.max(0, p.attackCooldown - dt);
+      if (p.rangedCooldown > 0) p.rangedCooldown = Math.max(0, p.rangedCooldown - dt);
       if (p.auraPulseTimer > 0) p.auraPulseTimer = Math.max(0, p.auraPulseTimer - dt);
       if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
       if (p.hitFlashTimer > 0) p.hitFlashTimer = Math.max(0, p.hitFlashTimer - dt);
@@ -1082,7 +1078,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             p.x,
             p.y,
             sim.entities,
-            sim.priorityTargetId
+            sim.priorityTargetId,
+            shouldInteractWithBerry(sim.stats.hp, sim.stats.maxHp)
           );
           if (target) {
             const dx = target.x - p.x;
@@ -1157,7 +1154,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         sim.spawnTimer -= dt;
         if (sim.spawnTimer <= 0 && aliveCount < 13) {
           sim.spawnTimer = 2.4;
-          sim.entities.push(spawnRandomFieldEntity(p.x, p.y, curField));
+          const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities);
+          if (spawned) sim.entities.push(spawned);
         }
 
         const bounds = getPlayableFieldBounds(curField);
@@ -1285,6 +1283,32 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
+      // Ranged spirit shot has its own cooldown, separate from close-range purification.
+      if (curZone === 'field' && p.rangedCooldown <= 0 && !immobilized) {
+        let target: WorldEntity | null = null;
+        let nearest = Infinity;
+        for (const entity of sim.entities) {
+          if (!entity.isHostile || entity.hp <= 0 || entity.koTimer > 0) continue;
+          const distance = Math.hypot(entity.x - p.x, entity.y - p.y);
+          if (distance < nearest) { nearest = distance; target = entity; }
+        }
+        if (target && nearest <= 280) {
+          const dx = target.x - p.x;
+          const dy = target.y - p.y;
+          const distance = Math.max(1, Math.hypot(dx, dy));
+          const speed = 250;
+          sim.projectiles.push({
+            id: nextId('p-proj'), owner: 'player', kind: 'foxfire',
+            x: p.x, y: p.y - 8,
+            vx: (dx / distance) * speed, vy: (dy / distance) * speed,
+            damage: sim.stats.attackPower, life: 1.4,
+          });
+          p.rangedCooldown = PLAYER_RANGED_ATTACK_COOLDOWN_SEC;
+          p.auraPulseTimer = 0.26;
+          soundEngine.playSwing();
+        }
+      }
+
       for (let i = sim.projectiles.length - 1; i >= 0; i--) {
         const proj = sim.projectiles[i];
         proj.life -= dt;
@@ -1294,7 +1318,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           sim.projectiles.splice(i, 1);
           continue;
         }
-        if (Math.hypot(p.x - proj.x, p.y - proj.y) < 18) {
+        if (proj.owner === 'player') {
+          const hitTarget = sim.entities.find((entity) =>
+            entity.isHostile && entity.hp > 0 && entity.koTimer <= 0 &&
+            Math.hypot(entity.x - proj.x, entity.y - proj.y) < 18
+          );
+          if (hitTarget) {
+            damageEnemy(hitTarget, proj.damage, proj.vx, proj.vy);
+            sim.projectiles.splice(i, 1);
+          }
+        } else if (Math.hypot(p.x - proj.x, p.y - proj.y) < 18) {
           damagePlayer(proj.damage, proj.vx, proj.vy);
           sim.projectiles.splice(i, 1);
         }
@@ -1567,13 +1600,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             sim.stats.equippedSkin === 'default'
               ? getFoxMikoAsset(p.dir, p.action, p.walkPhase)
               : getEventMikoAsset(p.dir, p.action, p.walkPhase);
-          const drawW = 48;
           const drawH = 72;
+          const drawW = (spr.width / Math.max(1, spr.height)) * drawH;
           const bob =
             p.action === 'walk'
               ? Math.abs(Math.sin(p.walkPhase * Math.PI)) * -2.5
               : 0;
-          ctx.drawImage(spr, p.x - drawW / 2, p.y - drawH / 2 + bob, drawW, drawH);
+          const feetY = p.y + 36 + bob;
+          ctx.drawImage(spr, p.x - drawW / 2, feetY - drawH, drawW, drawH);
 
           if (p.hitFlashTimer > 0) {
             ctx.fillStyle = 'rgba(255,120,120,0.5)';

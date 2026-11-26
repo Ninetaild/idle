@@ -40,7 +40,8 @@ function getSvgAtlasFrame(
   col: number,
   row: number,
   outW = frameW,
-  outH = frameH
+  outH = frameH,
+  preserveVisibleHeight = false
 ): HTMLCanvasElement | null {
   if (typeof Image === 'undefined') return null;
   let entry = svgAtlasImages.get(path);
@@ -62,45 +63,31 @@ function getSvgAtlasFrame(
   source.width = frameW;
   source.height = frameH;
   const sourceCtx = source.getContext('2d', { willReadFrequently: true });
+  if (!sourceCtx) return null;
+
+  sourceCtx.imageSmoothingEnabled = false;
+  sourceCtx.drawImage(entry.image, col * frameW, row * frameH, frameW, frameH, 0, 0, frameW, frameH);
+  const pixels = sourceCtx.getImageData(0, 0, frameW, frameH);
+  const bounds = getVisiblePixelBounds(pixels.data, frameW, frameH);
+  const targetW = preserveVisibleHeight && bounds
+    ? Math.max(1, Math.ceil((bounds.width * outH) / bounds.height))
+    : outW;
   const canvas = document.createElement('canvas');
-  canvas.width = outW;
+  canvas.width = targetW;
   canvas.height = outH;
   const ctx = canvas.getContext('2d');
 
-  if (sourceCtx && ctx) {
-    sourceCtx.imageSmoothingEnabled = false;
-    sourceCtx.drawImage(
-      entry.image,
-      col * frameW,
-      row * frameH,
-      frameW,
-      frameH,
-      0,
-      0,
-      frameW,
-      frameH
-    );
-
-    const pixels = sourceCtx.getImageData(0, 0, frameW, frameH);
-    const bounds = getVisiblePixelBounds(pixels.data, frameW, frameH);
+  if (ctx && bounds) {
+    // Protagonist poses share a fixed visible height; wider poses get a wider
+    // canvas rather than being scaled down to fit a fixed-width cell.
+    const scale = preserveVisibleHeight
+      ? outH / bounds.height
+      : Math.min(outH / bounds.height, outW / bounds.width);
+    const drawW = bounds.width * scale;
+    const drawH = bounds.height * scale;
     ctx.imageSmoothingEnabled = false;
-
-    if (bounds) {
-      const scale = Math.min(outH / bounds.height, outW / bounds.width);
-      const drawW = bounds.width * scale;
-      const drawH = bounds.height * scale;
-      ctx.drawImage(
-        source,
-        bounds.x,
-        bounds.y,
-        bounds.width,
-        bounds.height,
-        (outW - drawW) / 2,
-        (outH - drawH) / 2,
-        drawW,
-        drawH
-      );
-    }
+    ctx.drawImage(source, bounds.x, bounds.y, bounds.width, bounds.height,
+      (targetW - drawW) / 2, outH - drawH, drawW, drawH);
   }
   assetCache.set(key, canvas);
   return canvas;
@@ -1067,7 +1054,7 @@ export function getFoxMikoAsset(
     ? (Math.floor(walkPhase) % 2) + 1
     : action === 'pickup' || action === 'hurt' ? 3 : 0;
   return getSvgAtlasFrame(
-    'assets/sprites/protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96
+    'assets/sprites/protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96, true
   ) ?? getMikoAsset(dir, action, walkPhase, 'default');
 }
 
@@ -1080,6 +1067,6 @@ export function getEventMikoAsset(
   const row: Record<Direction, number> = { down: 0, up: 1, left: 2, right: 3 };
   const col = action === 'walk' ? (Math.floor(walkPhase) % 2) + 1 : action === 'pickup' || action === 'hurt' ? 3 : 0;
   return getSvgAtlasFrame(
-    'assets/sprites/event_protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96
+    'assets/sprites/event_protagonist_atlas.svg', 64, 96, col, row[dir], 64, 96, true
   ) ?? getMikoAsset(dir, action, walkPhase, 'winter_miko');
 }

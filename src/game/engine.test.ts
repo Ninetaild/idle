@@ -29,6 +29,9 @@ import {
   sellPillsToMerchant,
   sellHerbsToMerchant,
   STOMACHACHE_DURATION_SEC,
+  PLAYER_RANGED_ATTACK_COOLDOWN_SEC,
+  canSpawnEntityKind,
+  shouldInteractWithBerry,
 } from './logic';
 import type { WorldEntity } from './types';
 
@@ -217,6 +220,33 @@ test('viewport expands visible range with web resolution while keeping 1024:720 
   );
   assert.ok(Math.abs(worldPt.worldX - 100) < 2);
   assert.ok(Math.abs(worldPt.worldY - 200) < 2);
+});
+
+test('berries are unavailable at 80% HP or above', () => {
+  const berry: WorldEntity = {
+    id: 'berry-cap', kind: 'berry', name: '알 수 없는 열매', x: 10, y: 0,
+    vx: 0, vy: 0, hp: 1, maxHp: 1, dir: 'down', action: 'idle',
+    actionTimer: 0, aiTimer: 0, attackCooldown: 0, telegraphTimer: 0,
+    hitFlashTimer: 0, koTimer: 0, isHostile: false, isInteractable: true,
+  };
+  assert.equal(shouldInteractWithBerry(79, 100), true);
+  assert.equal(shouldInteractWithBerry(80, 100), false);
+  assert.equal(shouldInteractWithBerry(100, 100), false);
+  assert.equal(selectAutoOrPriorityTarget(0, 0, [berry], 'berry-cap', false), null);
+  assert.equal(PLAYER_RANGED_ATTACK_COOLDOWN_SEC, 10);
+});
+
+test('a field entity kind cannot spawn when three living instances already exist', () => {
+  const herb: WorldEntity = {
+    id: 'herb-cap-1', kind: 'herb', name: '알 수 없는 풀', x: 0, y: 0,
+    vx: 0, vy: 0, hp: 1, maxHp: 1, dir: 'down', action: 'idle',
+    actionTimer: 0, aiTimer: 0, attackCooldown: 0, telegraphTimer: 0,
+    hitFlashTimer: 0, koTimer: 0, isHostile: false, isInteractable: true,
+  };
+  const threeHerbs = [herb, { ...herb, id: 'herb-cap-2' }, { ...herb, id: 'herb-cap-3' }];
+  assert.equal(canSpawnEntityKind('herb', threeHerbs), false);
+  assert.equal(canSpawnEntityKind('berry', threeHerbs), true);
+  assert.equal(canSpawnEntityKind('herb', threeHerbs.slice(1)), true);
 });
 
 test('priority target overrides nearest auto-target until resolved', () => {
