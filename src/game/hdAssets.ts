@@ -692,7 +692,7 @@ export function getEntityAsset(
   };
   if (kind in enemyIndex) {
     const enemy = getSvgAtlasFrame(
-      'assets/sprites/enemy_atlas.svg', 96, 96, enemyIndex[kind], 0, 128, 90
+      'assets/sprites/enemy_atlas.webp', 96, 96, enemyIndex[kind], 0, 128, 90
     );
     if (enemy) return enemy;
   }
