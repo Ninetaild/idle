@@ -12,6 +12,7 @@ import {
   SNOWFLAKE_DROP_TABLE,
 } from './probability';
 import { computePixelViewport, screenToWorld } from './viewport';
+import { getVisiblePixelBounds } from './hdAssets';
 import {
   attemptEnhanceCharm,
   craftElixirFromHerb,
@@ -30,6 +31,22 @@ import {
   STOMACHACHE_DURATION_SEC,
 } from './logic';
 import type { WorldEntity } from './types';
+
+test('sprite frame trimming detects visible alpha bounds and ignores transparent padding', () => {
+  const width = 5;
+  const height = 4;
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  for (const [x, y] of [[1, 1], [2, 1], [1, 2], [2, 2]]) {
+    rgba[(y * width + x) * 4 + 3] = 255;
+  }
+  assert.deepEqual(getVisiblePixelBounds(rgba, width, height), {
+    x: 1,
+    y: 1,
+    width: 2,
+    height: 2,
+  });
+  assert.equal(getVisiblePixelBounds(new Uint8ClampedArray(width * height * 4), width, height), null);
+});
 
 test('weighted tables match specified probabilities accurately', () => {
   assert.equal(rollWeighted(FIELD_SPAWN_TABLE, () => 0.0).code, 1);
@@ -103,9 +120,9 @@ test('tiered herb gathering, berry eating, and alchemy outcomes apply accurately
   assert.equal(herbRare.inventory.herbs, 6);
   assert.equal(herbRare.stats.hp, 55);
 
-  assert.equal(STOMACHACHE_DURATION_SEC, 10);
+  assert.equal(STOMACHACHE_DURATION_SEC, 2);
   const berryStomach = eatFieldBerry(stats, inv, () => 0.05);
-  assert.equal(berryStomach.stats.stomachacheTimer, 10);
+  assert.equal(berryStomach.stats.stomachacheTimer, 2);
 
   const berryGolden = eatFieldBerry(stats, inv, () => 0.95);
   assert.equal(berryGolden.stats.hp, 85);

@@ -25,7 +25,7 @@ export const ECONOMY_PRICES = {
   herbSell: 12,
 } as const;
 
-export const STOMACHACHE_DURATION_SEC = 10;
+export const STOMACHACHE_DURATION_SEC = 2;
 
 export const FIELD_METADATA: Record<
   FieldId,

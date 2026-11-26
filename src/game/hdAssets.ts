@@ -6,6 +6,33 @@ export const ASSET_MASTER_HEIGHT = 720;
 const assetCache = new Map<string, HTMLCanvasElement>();
 const svgAtlasImages = new Map<string, { image: HTMLImageElement; ready: boolean }>();
 
+/** Finds the non-transparent pixel bounds in RGBA image data. */
+export function getVisiblePixelBounds(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  alphaThreshold = 16
+): { x: number; y: number; width: number; height: number } | null {
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = rgba[(y * width + x) * 4 + 3] ?? 0;
+      if (alpha <= alphaThreshold) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
 function getSvgAtlasFrame(
   path: string,
   frameW: number,
@@ -28,13 +55,52 @@ function getSvgAtlasFrame(
   const key = `svg:${path}:${col}:${row}:${outW}:${outH}`;
   const cached = assetCache.get(key);
   if (cached) return cached;
+  // Isolate the source cell, detect its actual opaque pixels, then scale that
+  // visible region to the output height. This prevents transparent padding in
+  // individual frames from making the character look unexpectedly smaller.
+  const source = document.createElement('canvas');
+  source.width = frameW;
+  source.height = frameH;
+  const sourceCtx = source.getContext('2d', { willReadFrequently: true });
   const canvas = document.createElement('canvas');
   canvas.width = outW;
   canvas.height = outH;
   const ctx = canvas.getContext('2d');
-  if (ctx) {
+
+  if (sourceCtx && ctx) {
+    sourceCtx.imageSmoothingEnabled = false;
+    sourceCtx.drawImage(
+      entry.image,
+      col * frameW,
+      row * frameH,
+      frameW,
+      frameH,
+      0,
+      0,
+      frameW,
+      frameH
+    );
+
+    const pixels = sourceCtx.getImageData(0, 0, frameW, frameH);
+    const bounds = getVisiblePixelBounds(pixels.data, frameW, frameH);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(entry.image, col * frameW, row * frameH, frameW, frameH, 0, 0, outW, outH);
+
+    if (bounds) {
+      const scale = Math.min(outH / bounds.height, outW / bounds.width);
+      const drawW = bounds.width * scale;
+      const drawH = bounds.height * scale;
+      ctx.drawImage(
+        source,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        (outW - drawW) / 2,
+        (outH - drawH) / 2,
+        drawW,
+        drawH
+      );
+    }
   }
   assetCache.set(key, canvas);
   return canvas;
