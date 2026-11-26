@@ -703,8 +703,15 @@ export function getEntityAsset(
     village_sign: 11,
   };
   if (kind in propIndex) {
+    const propIndexValue = propIndex[kind];
     const prop = getSvgAtlasFrame(
-      'assets/sprites/field_props_atlas.svg', 96, 96, propIndex[kind], 0, 96, 68
+      'assets/sprites/field_props_atlas.svg',
+      96,
+      96,
+      propIndexValue % 6,
+      Math.floor(propIndexValue / 6),
+      96,
+      68
     );
     if (prop) return prop;
   }
