@@ -14,13 +14,18 @@ import type {
   MikoSkinId,
   PlayerStats,
   WorldEntity,
+  AbilityId,
+  SkillId,
+  AbilityRoll,
 } from './types';
 
 export const ECONOMY_PRICES = {
   elixirSell: 45,
   dudPillSell: 5,
   baseEnhanceCost: 60,
-  enhanceCostMultiplier: 1.2,
+  enhanceCostMultiplier: 1.1,
+  abilityImprintJewels: 1,
+  skillChangeJewels: 1,
   winterMikoSnowflakes: 500,
   herbSell: 12,
 } as const;
@@ -85,6 +90,9 @@ export function createInitialStats(): PlayerStats {
     totalGathered: 0,
     unlockedSkins: ['default'],
     equippedSkin: 'default',
+    abilities: [],
+    equippedSkill: 'foxfire_burst',
+    fieldDifficulties: { forest: 1, plains: 1, river: 1, snowy_forest: 1 },
   };
 }
 
@@ -95,6 +103,8 @@ export function createInitialInventory(): Inventory {
     elixirs: 1,
     dudPills: 0,
     snowflakes: 0,
+    eventTokens: 0,
+    jewels: 0,
   };
 }
 
@@ -162,7 +172,7 @@ export function sellPillsToMerchant(
 
   const unitPrice =
     item === 'elixir' ? ECONOMY_PRICES.elixirSell : ECONOMY_PRICES.dudPillSell;
-  const earned = sellQty * unitPrice;
+  const earned = Math.round(sellQty * unitPrice * getAbilityMultiplier(stats, 'gold_gain'));
 
   return {
     stats: {
@@ -181,55 +191,71 @@ export function sellPillsToMerchant(
 }
 
 /**
- * Charm Enhancement with stage-based Success / Maintain / Downgrade pool
- * and 1.2x next-enhancement cost scaling on every attempt.
+ * Charm enhancement: success increases attack power by 10%; failure only maintains.
  */
-export function attemptEnhanceCharm(
-  stats: PlayerStats,
-  inventory: Inventory,
-  rng: () => number = Math.random
-): ActionOutcome {
-  if (stats.gold < stats.enhanceCost) {
-    return {
-      stats,
-      inventory,
-      message: `엽전이 부족합니다. (필요: ${stats.enhanceCost}엽전)`,
-      tone: 'warning',
-      code: 'insufficient',
-    };
-  }
-
-  const pool = getEnhancePool(stats.enhanceLevel);
-  const rolled = rollWeighted(pool, rng);
-  const nextCost = Math.round(
-    stats.enhanceCost * ECONOMY_PRICES.enhanceCostMultiplier
-  );
-
-  let nextLevel = stats.enhanceLevel;
-  let tone: ActionOutcome['tone'] = 'neutral';
-  if (rolled.code === 'success') {
-    nextLevel = stats.enhanceLevel + 1;
-    tone = 'positive';
-  } else if (rolled.code === 'downgrade') {
-    nextLevel = Math.max(0, stats.enhanceLevel - 1);
-    tone = 'warning';
-  }
-
-  const nextAttack = 14 + nextLevel * 5;
-
+export function attemptEnhanceCharm(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ActionOutcome {
+  if (stats.gold < stats.enhanceCost) return { stats, inventory, message: `엽전이 부족합니다. (필요: ${stats.enhanceCost}엽전)`, tone: 'warning', code: 'insufficient' };
+  const rolled = rollWeighted(getEnhancePool(stats.enhanceLevel), rng);
+  const success = rolled.code === 'success';
+  const nextLevel = stats.enhanceLevel + (success ? 1 : 0);
+  const nextAttack = success ? Number((stats.attackPower * 1.1).toFixed(2)) : stats.attackPower;
+  const nextCost = Math.round(stats.enhanceCost * ECONOMY_PRICES.enhanceCostMultiplier);
   return {
-    stats: {
-      ...stats,
-      gold: stats.gold - stats.enhanceCost,
-      enhanceLevel: nextLevel,
-      enhanceCost: nextCost,
-      attackPower: nextAttack,
-    },
+    stats: { ...stats, gold: stats.gold - stats.enhanceCost, enhanceLevel: nextLevel, enhanceCost: nextCost, attackPower: nextAttack },
     inventory,
-    message: `${rolled.text} (+${nextLevel}단계 · 공격력 ${nextAttack})`,
-    tone,
+    message: success ? `강화 성공! 공격력이 1.1배 증가했습니다. (+${nextLevel}단계 · 공격력 ${nextAttack})` : `강화 유지. 기운이 그대로 머물렀습니다. (+${nextLevel}단계)`,
+    tone: success ? 'positive' : 'neutral',
     code: rolled.code,
   };
+}
+
+export const ABILITY_LABELS: Record<AbilityId, string> = {
+  attack_power: '공격력', max_hp: '최대 체력', gold_gain: '재화 획득량',
+  attack_frequency: '공격 내부 쿨다운 감소', attack_speed: '공격 속도',
+};
+
+export const SKILL_DEFINITIONS: Record<SkillId, { name: string; type: 'area' | 'single'; multiplier: number; description: string }> = {
+  foxfire_burst: { name: '여우불 폭발', type: 'area', multiplier: 0.85, description: '주변 적에게 함께 피해를 주는 범위 기술' },
+  purification_bolt: { name: '퇴마의 화살', type: 'single', multiplier: 1.35, description: '한 대상에게 강한 피해를 주는 단일 기술' },
+  frost_ring: { name: '빙결의 고리', type: 'area', multiplier: 1.0, description: '넓은 범위에 서리 피해를 주는 기술' },
+  wind_slash: { name: '풍신참', type: 'single', multiplier: 1.5, description: '한 대상에게 큰 피해를 주는 단일 기술' },
+};
+
+export function getAbilityMultiplier(stats: PlayerStats, id: AbilityId): number {
+  return stats.abilities?.find((ability) => ability.id === id)?.multiplier ?? 1;
+}
+export function getFieldDifficulty(stats: PlayerStats, fieldId: FieldId): number {
+  return Math.max(1, Math.min(10, Math.floor(stats.fieldDifficulties?.[fieldId] ?? 1)));
+}
+export function setFieldDifficulty(stats: PlayerStats, fieldId: FieldId, level: number): PlayerStats {
+  return { ...stats, fieldDifficulties: { forest: 1, plains: 1, river: 1, snowy_forest: 1, ...stats.fieldDifficulties, [fieldId]: Math.max(1, Math.min(10, Math.floor(level))) } };
+}
+export function imbueCharm(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ActionOutcome {
+  const jewels = inventory.jewels ?? 0;
+  if (jewels < ECONOMY_PRICES.abilityImprintJewels) return { stats, inventory, message: `보옥이 부족합니다. (필요: ${ECONOMY_PRICES.abilityImprintJewels}개)`, tone: 'warning', code: 'insufficient' };
+  const ids: AbilityId[] = ['attack_power', 'max_hp', 'gold_gain', 'attack_frequency', 'attack_speed'];
+  const shuffled = [...ids];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const rolls = [1.1 + rng() * 0.1, 1.3, 1.4 + rng() * 0.1];
+  const abilities: AbilityRoll[] = shuffled.slice(0, 3).map((id, index) => ({ id, multiplier: Number(rolls[index].toFixed(2)) }));
+  const oldHp = getAbilityMultiplier(stats, 'max_hp');
+  const newHp = abilities.find((ability) => ability.id === 'max_hp')?.multiplier ?? 1;
+  const hpRatio = stats.maxHp > 0 ? stats.hp / stats.maxHp : 1;
+  const nextMaxHp = Math.round((stats.maxHp / oldHp) * newHp);
+  return {
+    stats: { ...stats, abilities, maxHp: nextMaxHp, hp: Math.min(nextMaxHp, Math.round(nextMaxHp * hpRatio)) },
+    inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.abilityImprintJewels },
+    message: `능력 부여 완료! ${abilities.map((a) => `${ABILITY_LABELS[a.id]} ×${a.multiplier.toFixed(2)}`).join(' · ')}`,
+    tone: 'positive', code: 'imbued',
+  };
+}
+export function changeEquippedSkill(stats: PlayerStats, inventory: Inventory, skill: SkillId): ActionOutcome {
+  const jewels = inventory.jewels ?? 0;
+  if (stats.equippedSkill === skill) return { stats, inventory, message: '이미 선택한 기술입니다.', tone: 'neutral', code: 'unchanged' };
+  if (jewels < ECONOMY_PRICES.skillChangeJewels) return { stats, inventory, message: `보옥이 부족합니다. (필요: ${ECONOMY_PRICES.skillChangeJewels}개)`, tone: 'warning', code: 'insufficient' };
+  return { stats: { ...stats, equippedSkill: skill }, inventory: { ...inventory, jewels: jewels - ECONOMY_PRICES.skillChangeJewels }, message: `기술을 ${SKILL_DEFINITIONS[skill].name}(으)로 변경했습니다.`, tone: 'positive', code: 'changed' };
 }
 
 /**
@@ -285,7 +311,7 @@ export function eatFieldBerry(
   }
 
   const healMap: Record<number, number> = { 2: 8, 3: 14, 4: 22, 5: 35 };
-  const goldBonus = rolled.code === 5 ? 15 : 0;
+  const goldBonus = rolled.code === 5 ? Math.round(15 * getAbilityMultiplier(stats, 'gold_gain')) : 0;
 
   return {
     stats: {
@@ -329,7 +355,7 @@ export function resolveFieldEvent(
         stats: {
           ...stats,
           goodDeeds: stats.goodDeeds + 1,
-          gold: stats.gold + 25,
+          gold: stats.gold + Math.round(25 * getAbilityMultiplier(stats, 'gold_gain')),
         },
         inventory: {
           ...inventory,
@@ -358,7 +384,7 @@ export function resolveFieldEvent(
         stats: {
           ...stats,
           goodDeeds: stats.goodDeeds + 1,
-          gold: stats.gold + 20,
+          gold: stats.gold + Math.round(20 * getAbilityMultiplier(stats, 'gold_gain')),
         },
         inventory: {
           ...inventory,
@@ -406,7 +432,7 @@ export function resolveFieldEvent(
       return {
         stats: {
           ...stats,
-          gold: stats.gold + 35,
+          gold: stats.gold + Math.round(35 * getAbilityMultiplier(stats, 'gold_gain')),
         },
         inventory,
         message: stoneRoll.text,
@@ -432,7 +458,7 @@ export function resolveFieldEvent(
   return {
     stats: {
       ...stats,
-      gold: stats.gold + 18,
+      gold: stats.gold + Math.round(18 * getAbilityMultiplier(stats, 'gold_gain')),
     },
     inventory: {
       ...inventory,
@@ -575,7 +601,7 @@ export function sellHerbsToMerchant(
       code: 0,
     };
   }
-  const earned = sellQty * ECONOMY_PRICES.herbSell;
+  const earned = Math.round(sellQty * ECONOMY_PRICES.herbSell * getAbilityMultiplier(stats, 'gold_gain'));
   return {
     stats: { ...stats, gold: stats.gold + earned },
     inventory: { ...inventory, herbs: inventory.herbs - sellQty },
