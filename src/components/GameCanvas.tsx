@@ -21,6 +21,7 @@ import {
   SKILL_DEFINITIONS,
 } from '../game/logic';
 import {
+  ELITE_ENEMY_TABLE,
   FIELD_EVENT_TABLE,
   FIELD_SPAWN_TABLE,
   rollWeighted,
@@ -334,6 +335,25 @@ function createEventByCode(
   }
 }
 
+
+function applyEnemyScaling(entity: WorldEntity, difficultyLevel: number): WorldEntity {
+  if (!entity.isHostile) {
+    entity.isElite = false;
+    entity.damageMultiplier = 1;
+    return entity;
+  }
+  const levelScale = 1 + (Math.max(1, Math.min(10, difficultyLevel)) - 1) * 0.18;
+  const isElite = rollWeighted(ELITE_ENEMY_TABLE).code === 'elite';
+  const eliteMultiplier = isElite ? 2 : 1;
+  entity.maxHp = Math.round(entity.maxHp * levelScale * eliteMultiplier);
+  entity.hp = entity.maxHp;
+  entity.damageMultiplier = levelScale * eliteMultiplier;
+  entity.isElite = isElite;
+  entity.name = entity.name.replace(/^강적 · /, '');
+  if (isElite) entity.name = `강적 · ${entity.name}`;
+  return entity;
+}
+
 function spawnRandomFieldEntity(
   playerX: number,
   playerY: number,
@@ -377,15 +397,7 @@ function spawnRandomFieldEntity(
       candidate = createEventByCode(base, rollWeighted(FIELD_EVENT_TABLE).code);
     }
 
-    if (candidate.isHostile) {
-      const levelScale = 1 + (Math.max(1, Math.min(10, difficultyLevel)) - 1) * 0.18;
-      const isElite = Math.random() < 0.1;
-      candidate.maxHp = Math.round(candidate.maxHp * levelScale * (isElite ? 2 : 1));
-      candidate.hp = candidate.maxHp;
-      candidate.damageMultiplier = levelScale * (isElite ? 2 : 1);
-      candidate.isElite = isElite;
-      if (isElite) candidate.name = `강적 · ${candidate.name}`;
-    }
+    applyEnemyScaling(candidate, difficultyLevel);
     if (canSpawnEntityKind(candidate.kind, existingEntities)) return candidate;
   }
   return null;
@@ -549,13 +561,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const specialSpecies: 4 | 5 | 6 =
             fieldId === 'snowy_forest' ? 6 : fieldId === 'river' ? 5 : 4;
           const yokai = createYokaiByCode(ent, specialSpecies);
-          const levelScale = 1 + (getFieldDifficulty(sim.stats, fieldId) - 1) * 0.18;
-          const isElite = Math.random() < 0.1;
-          yokai.maxHp = Math.round(yokai.maxHp * levelScale * (isElite ? 2 : 1));
-          yokai.hp = yokai.maxHp;
-          yokai.damageMultiplier = levelScale * (isElite ? 2 : 1);
-          yokai.isElite = isElite;
-          if (isElite) yokai.name = `강적 · ${yokai.name}`;
+          applyEnemyScaling(yokai, getFieldDifficulty(sim.stats, fieldId));
           yokai.x = startX + 150;
           yokai.y = startY + 75;
           seeded.push(yokai);
@@ -892,6 +898,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ent.isInteractable = false;
           ent.hp = 36;
           ent.maxHp = 36;
+          applyEnemyScaling(ent, getFieldDifficulty(sim.stats, propsRef.current.fieldId));
           ent.attackCooldown = 0.6;
           emitParticles(ent.x, ent.y, '#f87171', 14, 70);
           propsRef.current.onLog(res.message, 'combat');
