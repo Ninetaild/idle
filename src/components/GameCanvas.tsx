@@ -530,6 +530,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const specialSpecies: 4 | 5 | 6 =
             fieldId === 'snowy_forest' ? 6 : fieldId === 'river' ? 5 : 4;
           const yokai = createYokaiByCode(ent, specialSpecies);
+          const levelScale = 1 + (getFieldDifficulty(sim.stats, fieldId) - 1) * 0.18;
+          const isElite = Math.random() < 0.1;
+          yokai.maxHp = Math.round(yokai.maxHp * levelScale * (isElite ? 3 : 1));
+          yokai.hp = yokai.maxHp;
+          yokai.damageMultiplier = levelScale * (isElite ? 1.6 : 1);
+          yokai.isElite = isElite;
+          if (isElite) yokai.name = `강적 · ${yokai.name}`;
           yokai.x = startX + 150;
           yokai.y = startY + 75;
           seeded.push(yokai);
