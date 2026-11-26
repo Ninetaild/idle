@@ -750,7 +750,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         sim.stats.gold += goldDrop;
         if (ent.isHostile && ent.isElite) {
           const tokens = scaleReward(1, currentRewardMultiplier());
-          const jewels = scaleReward(1, currentRewardMultiplier());
+          const jewels = 1; // Jewels are not affected by the difficulty reward multiplier.
           sim.inventory = { ...sim.inventory, eventTokens: (sim.inventory.eventTokens ?? 0) + tokens, jewels: (sim.inventory.jewels ?? 0) + jewels };
           propsRef.current.onLog(`강적을 정화해 이벤트 재화 ${tokens}개와 보옥 ${jewels}개를 획득했습니다!`, 'positive');
         }
