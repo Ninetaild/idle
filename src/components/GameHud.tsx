@@ -73,7 +73,7 @@ export const GameHud: React.FC<GameHudProps> = ({
   const zoneTitle =
     zone === 'village'
       ? '신사 마을'
-      : `${fieldMeta.category === 'event' ? '이벤트' : '상시'} · ${fieldMeta.name}`;
+      : `${fieldMeta.category === 'event' ? '이벤트' : '상시'} · ${fieldMeta.name} · ${stats.fieldDifficulties?.[fieldId] ?? 1}단계`;
 
   return (
     <div className="fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-2.5 md:p-4">
@@ -195,7 +195,7 @@ export const GameHud: React.FC<GameHudProps> = ({
 
         {/* Bottom-Right Unified Perimeter Action Dock */}
         <div className="pointer-events-auto shrine-panel rounded-md p-2 flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2.5 px-1.5 text-xs text-[#d9c5a0] font-mono-num whitespace-nowrap">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 px-1.5 text-[11px] text-[#d9c5a0] font-mono-num">
             <span>풀 {inventory.herbs}</span>
             <span aria-hidden="true" className="text-[#6b4f3a]">
               ·
@@ -209,6 +209,8 @@ export const GameHud: React.FC<GameHudProps> = ({
               ·
             </span>
             <span className="text-[#7dd3fc]">눈송이 {inventory.snowflakes}</span>
+            <span aria-hidden="true" className="text-[#6b4f3a]">·</span><span className="text-[#fde68a]">재화 {inventory.eventTokens ?? 0}</span>
+            <span aria-hidden="true" className="text-[#6b4f3a]">·</span><span className="text-[#ddd6fe]">보옥 {inventory.jewels ?? 0}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
