@@ -1523,17 +1523,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const animTime = ent.animTimer ?? sim.ambientTimer;
             const isFlying = ent.kind === 'fairy_sylph' || ent.kind === 'yokai_tengu';
             const isPlant = ent.kind === 'herb' || ent.kind === 'berry';
-            const isPickup = ent.kind === 'snowflake' || ent.kind === 'gold_coin' ||
-              ent.kind === 'snowflake_pickup' || ent.kind === 'snowflake_crystal';
             const walkCycle = animTime * (isFlying ? 10 : 13) + ent.x * 0.035;
             const idleBob = Math.sin(animTime * 2.2 + ent.x * 0.02) * 1.2;
             const bob = isFlying
               ? Math.sin(walkCycle) * 4
-              : isPickup
-                ? Math.sin(animTime * 2.8 + ent.x * 0.025) * 2.8
-                : ent.isMoving
-                  ? Math.abs(Math.sin(walkCycle)) * -3.5
-                  : idleBob;
+              : ent.isMoving
+                ? Math.abs(Math.sin(walkCycle)) * -3.5
+                : idleBob;
             const koOffsetY = ent.koTimer > 0 ? (0.35 - ent.koTimer) * 18 : 0;
             const stride = ent.isMoving && ent.koTimer <= 0;
             const squash = stride ? 1 + Math.sin(walkCycle * 2) * 0.045 : 1 + Math.sin(animTime * 2) * 0.012;
@@ -1573,19 +1569,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
             // Props keep a grounded footprint; plants sway gently and pickups float.
             ctx.save();
-            if (isPickup && ent.koTimer <= 0) {
-              const glowRadius = 19 + Math.sin(animTime * 3.1) * 2;
-              const glow = ctx.createRadialGradient(ent.x, ent.y - halfH * 0.45 + bob, 1, ent.x, ent.y - halfH * 0.45 + bob, glowRadius);
-              const glowColor = ent.kind === 'gold_coin'
-                ? 'rgba(255, 198, 66, 0.20)'
-                : 'rgba(116, 190, 255, 0.18)';
-              glow.addColorStop(0, glowColor);
-              glow.addColorStop(1, 'rgba(116, 190, 255, 0)');
-              ctx.fillStyle = glow;
-              ctx.beginPath();
-              ctx.arc(ent.x, ent.y - halfH * 0.45 + bob, glowRadius, 0, Math.PI * 2);
-              ctx.fill();
-            }
             ctx.translate(ent.x, ent.y + bob + koOffsetY);
             ctx.rotate(lean);
             ctx.scale(ent.dir === 'left' ? -squash : squash, stretch);
