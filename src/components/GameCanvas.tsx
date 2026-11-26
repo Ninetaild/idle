@@ -17,6 +17,7 @@ import {
   PLAYER_RANGED_ATTACK_COOLDOWN_SEC,
   getAbilityMultiplier,
   getFieldDifficulty,
+  rollSkillMultiplier,
   SKILL_DEFINITIONS,
 } from '../game/logic';
 import {
@@ -272,6 +273,8 @@ function createEventByCode(
         maxHp: 30,
         isHostile: false,
         isInteractable: true,
+        isElite: false,
+        damageMultiplier: 1,
         revealedBandit: false,
       };
     case 2:
@@ -294,6 +297,8 @@ function createEventByCode(
         maxHp: 20,
         isHostile: false,
         isInteractable: true,
+        isElite: false,
+        damageMultiplier: 1,
       };
     case 4:
       return {
@@ -365,9 +370,9 @@ function spawnRandomFieldEntity(
     if (candidate.isHostile) {
       const levelScale = 1 + (Math.max(1, Math.min(10, difficultyLevel)) - 1) * 0.18;
       const isElite = Math.random() < 0.1;
-      candidate.maxHp = Math.round(candidate.maxHp * levelScale * (isElite ? 3 : 1));
+      candidate.maxHp = Math.round(candidate.maxHp * levelScale * (isElite ? 2 : 1));
       candidate.hp = candidate.maxHp;
-      candidate.damageMultiplier = levelScale * (isElite ? 1.6 : 1);
+      candidate.damageMultiplier = levelScale * (isElite ? 2 : 1);
       candidate.isElite = isElite;
       if (isElite) candidate.name = `강적 · ${candidate.name}`;
     }
@@ -517,6 +522,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ent.name = '알 수 없는 풀';
           ent.isHostile = false;
           ent.isInteractable = true;
+          ent.isElite = false;
+          ent.damageMultiplier = 1;
           ent.x = startX - 95;
           ent.y = startY + 42;
         } else if (i === 1) {
@@ -524,6 +531,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ent.name = '알 수 없는 열매';
           ent.isHostile = false;
           ent.isInteractable = true;
+          ent.isElite = false;
+          ent.damageMultiplier = 1;
           ent.x = startX + 102;
           ent.y = startY - 46;
         } else if (i === 2) {
@@ -532,9 +541,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const yokai = createYokaiByCode(ent, specialSpecies);
           const levelScale = 1 + (getFieldDifficulty(sim.stats, fieldId) - 1) * 0.18;
           const isElite = Math.random() < 0.1;
-          yokai.maxHp = Math.round(yokai.maxHp * levelScale * (isElite ? 3 : 1));
+          yokai.maxHp = Math.round(yokai.maxHp * levelScale * (isElite ? 2 : 1));
           yokai.hp = yokai.maxHp;
-          yokai.damageMultiplier = levelScale * (isElite ? 1.6 : 1);
+          yokai.damageMultiplier = levelScale * (isElite ? 2 : 1);
           yokai.isElite = isElite;
           if (isElite) yokai.name = `강적 · ${yokai.name}`;
           yokai.x = startX + 150;
@@ -739,7 +748,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         };
         const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getAbilityMultiplier(sim.stats, 'gold_gain'));
         sim.stats.gold += goldDrop;
-        if (ent.isElite) {
+        if (ent.isHostile && ent.isElite) {
           sim.inventory = { ...sim.inventory, eventTokens: (sim.inventory.eventTokens ?? 0) + 1, jewels: (sim.inventory.jewels ?? 0) + 1 };
           propsRef.current.onLog('강적을 정화해 이벤트 재화 1개와 보옥 1개를 확정 획득했습니다!', 'positive');
         }
@@ -1355,7 +1364,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             kind: skill.name === '빙결의 고리' ? 'ice' : skill.name === '풍신참' ? 'wind' : 'foxfire',
             x: p.x, y: p.y - 8,
             vx: (dx / distance) * speed, vy: (dy / distance) * speed,
-            damage: sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power') * skill.multiplier,
+            damage: sim.stats.attackPower * getAbilityMultiplier(sim.stats, 'attack_power') * rollSkillMultiplier(sim.stats.equippedSkill ?? 'foxfire_burst'),
             life: 1.4, splashRadius: skill.type === 'area' ? 92 : 0, skillName: skill.name,
           });
           p.rangedCooldown = PLAYER_RANGED_ATTACK_COOLDOWN_SEC / getAbilityMultiplier(sim.stats, 'attack_frequency');
@@ -1583,7 +1592,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.ellipse(ent.x, ent.y + halfH * 0.65, halfW * 0.55, 6, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            if (ent.isElite) {
+            if (ent.isHostile && ent.isElite) {
               const pulse = 0.6 + Math.sin(sim.ambientTimer * 4) * 0.15;
               ctx.strokeStyle = `rgba(250, 204, 21, ${pulse})`;
               ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(ent.x, ent.y + 2, halfW * 0.8 + 8, 0, Math.PI * 2); ctx.stroke();
