@@ -11,6 +11,9 @@ import { TitleScreen } from './components/TitleScreen';
 import { VillageModals } from './components/VillageModals';
 import {
   attemptEnhanceCharm,
+  imbueCharm,
+  changeEquippedSkill,
+  setFieldDifficulty,
   craftElixirFromHerb,
   createInitialInventory,
   createInitialStats,
@@ -52,7 +55,7 @@ function loadSavedData(): SavedData | null {
     const parsed = JSON.parse(raw) as Partial<SavedData>;
     if (!parsed.stats || !parsed.inventory) return null;
     return {
-      stats: { ...createInitialStats(), ...parsed.stats },
+      stats: { ...createInitialStats(), ...parsed.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties, ...parsed.stats.fieldDifficulties }, abilities: parsed.stats.abilities ?? [], equippedSkill: parsed.stats.equippedSkill ?? 'foxfire_burst' },
       inventory: { ...createInitialInventory(), ...parsed.inventory },
       // Always resume in the village after a browser restart.
       // Keep the saved field selection for the next walk.
@@ -284,8 +287,29 @@ export default function App() {
     setStationResultText(outcome.message);
     pushLog(outcome.message, outcome.tone);
     if (outcome.code === 'success') soundEngine.playElixir();
-    else if (outcome.code === 'downgrade') soundEngine.playHurt();
     else soundEngine.playPickup();
+  };
+
+  const handleImbueCharm = () => {
+    const outcome = imbueCharm(stats, inventory);
+    setStats(outcome.stats); setInventory(outcome.inventory);
+    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
+    setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
+    if (outcome.code === 'imbued') soundEngine.playElixir();
+  };
+
+  const handleChangeSkill = (skill: import('./game/types').SkillId) => {
+    const outcome = changeEquippedSkill(stats, inventory, skill);
+    setStats(outcome.stats); setInventory(outcome.inventory);
+    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
+    setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
+    if (outcome.code === 'changed') soundEngine.playPickup();
+  };
+
+  const handleSetFieldDifficulty = (fid: FieldId, level: number) => {
+    const nextStats = setFieldDifficulty(stats, fid, level);
+    setStats(nextStats); engineRef.current?.syncExternalState(nextStats, inventory);
+    setStationResultText(`${FIELD_METADATA[fid].name} 난이도를 ${level}단계로 설정했습니다.`);
   };
 
   const handleBuyWinterSkin = () => {
@@ -322,7 +346,7 @@ export default function App() {
     if (!saved.stats || !saved.inventory) {
       throw new Error('저장 데이터에 필수 정보가 없습니다.');
     }
-    const nextStats = { ...createInitialStats(), ...saved.stats };
+    const nextStats = { ...createInitialStats(), ...saved.stats, fieldDifficulties: { ...createInitialStats().fieldDifficulties, ...saved.stats.fieldDifficulties }, abilities: saved.stats.abilities ?? [], equippedSkill: saved.stats.equippedSkill ?? 'foxfire_burst' };
     const nextInventory = { ...createInitialInventory(), ...saved.inventory };
     setStats(nextStats);
     setInventory(nextInventory);
@@ -427,6 +451,9 @@ export default function App() {
         onSellItem={handleSellItem}
         onSellHerbs={handleSellHerbs}
         onEnhanceCharm={handleEnhanceCharm}
+        onImbueCharm={handleImbueCharm}
+        onChangeSkill={handleChangeSkill}
+        onSetFieldDifficulty={handleSetFieldDifficulty}
         onBuyWinterSkin={handleBuyWinterSkin}
         onEquipSkin={handleEquipSkin}
       />
