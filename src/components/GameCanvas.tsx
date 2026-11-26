@@ -1550,10 +1550,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
             // Transform around the feet/ground anchor: enemies now face their
             // horizontal travel direction and have a looping walk/breath cycle.
+            ctx.save();
             ctx.translate(ent.x, ent.y + bob + koOffsetY);
             ctx.rotate(lean);
             ctx.scale(ent.dir === 'left' ? -squash : squash, stretch);
             ctx.drawImage(spr, -halfW, -halfH, drawW, drawH);
+            ctx.restore();
 
             // Light snow dusting resting on top of field elements in Snowy Forest
             if (curField === 'snowy_forest' && curZone === 'field' && ent.koTimer <= 0) {
