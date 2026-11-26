@@ -105,7 +105,7 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
     activeStation === 'alchemy'
       ? '단약 연단 화로'
       : activeStation === 'merchant'
-        ? '마을 상점 · 부적 강화'
+        ? '마을 메뉴 · 부적 강화'
         : activeStation === 'event_shop'
           ? '겨울 이벤트 상점'
           : '산책할 필드 선택';
@@ -116,8 +116,9 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={modalTitle}
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
-      <div className="shrine-panel rounded-md w-full max-w-lg p-5 text-[#fbf8f1] max-h-[90vh] overflow-y-auto">
+      <div className="shrine-panel rounded-md w-full max-w-lg p-5 text-[#fbf8f1] max-h-[90vh] overflow-y-auto" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#4a3728]">
           <h2 className="font-display text-xl font-bold text-[#fde68a]">
             {modalTitle}
@@ -139,18 +140,19 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                 <div className="text-xs font-bold text-[#86efac] mb-2">
                   상시 오픈 필드
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="flex flex-col gap-2">
                   {openFields.map((fid) => {
                     const meta = FIELD_METADATA[fid];
                     const level = stats.fieldDifficulties?.[fid] ?? 1;
                     return (
-                      <div key={fid} className="p-3 bg-[#241b18] border border-[#6b4f3a] rounded-xs space-y-2">
-                        <div><div className="font-bold text-[#fbf8f1]">{meta.name}</div><div className="text-[11px] text-[#d9c5a0]">{meta.subtitle}</div></div>
-                        <div className="flex items-center justify-between gap-2">
-                          <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#d9c5a0]">난이도</label>
-                          <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#140f0e] border border-[#6b4f3a] rounded-xs px-2 py-1 text-xs text-[#fde68a]">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
-                          <button type="button" onClick={() => onSelectField(fid)} className="shrine-button px-3 py-1.5 text-xs font-bold bg-[#24543e] border border-[#4ade80] rounded-xs">입장</button>
+                      <div key={fid} className="min-w-0 px-3 py-2.5 bg-[#241b18] border border-[#6b4f3a] rounded-xs flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-[#fbf8f1] whitespace-nowrap">{meta.name}</div>
+                          <div className="text-[11px] text-[#d9c5a0] whitespace-nowrap overflow-hidden text-ellipsis">{meta.subtitle}</div>
                         </div>
+                        <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#d9c5a0] whitespace-nowrap shrink-0">난이도</label>
+                        <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#140f0e] border border-[#6b4f3a] rounded-xs px-2 py-1 text-xs text-[#fde68a] whitespace-nowrap shrink-0">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
+                        <button type="button" onClick={() => onSelectField(fid)} className="shrine-button px-3 py-1.5 text-xs font-bold bg-[#24543e] border border-[#4ade80] rounded-xs whitespace-nowrap shrink-0">입장</button>
                       </div>
                     );
                   })}
@@ -161,18 +163,19 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                 <div className="text-xs font-bold text-[#7dd3fc] mb-2">
                   이벤트 필드
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="flex flex-col gap-2">
                   {eventFields.map((fid) => {
                     const meta = FIELD_METADATA[fid];
                     const level = stats.fieldDifficulties?.[fid] ?? 1;
                     return (
-                      <div key={fid} className="p-3.5 bg-[#172838] border border-[#38bdf8] rounded-xs space-y-2">
-                        <div><div className="font-bold text-[#e0f2fe]">{meta.name}</div><div className="text-xs text-[#bae6fd]">{meta.subtitle}</div></div>
-                        <div className="flex items-center justify-between gap-2">
-                          <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#bae6fd]">난이도</label>
-                          <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#10202d] border border-[#38bdf8] rounded-xs px-2 py-1 text-xs text-[#e0f2fe]">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
-                          <button type="button" onClick={() => onSelectField(fid)} className="shrine-button px-3 py-1.5 text-xs font-bold bg-[#0284c7] text-white rounded-xs">입장</button>
+                      <div key={fid} className="min-w-0 px-3 py-2.5 bg-[#172838] border border-[#38bdf8] rounded-xs flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-[#e0f2fe] whitespace-nowrap">{meta.name}</div>
+                          <div className="text-[11px] text-[#bae6fd] whitespace-nowrap overflow-hidden text-ellipsis">{meta.subtitle}</div>
                         </div>
+                        <label htmlFor={`difficulty-${fid}`} className="text-[11px] text-[#bae6fd] whitespace-nowrap shrink-0">난이도</label>
+                        <select id={`difficulty-${fid}`} value={level} onChange={(event) => onSetFieldDifficulty(fid, Number(event.target.value))} className="bg-[#10202d] border border-[#38bdf8] rounded-xs px-2 py-1 text-xs text-[#e0f2fe] whitespace-nowrap shrink-0">{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}단계</option>)}</select>
+                        <button type="button" onClick={() => onSelectField(fid)} className="shrine-button px-3 py-1.5 text-xs font-bold bg-[#0284c7] text-white rounded-xs whitespace-nowrap shrink-0">입장</button>
                       </div>
                     );
                   })}
@@ -437,9 +440,15 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
               </div>
               <div className="p-3 bg-[#172838] border border-[#38bdf8]/60 rounded-xs space-y-2">
                 <div className="font-bold text-sm text-[#bae6fd]">전투 기술</div>
-                <div className="text-[11px] text-[#d9c5a0]">기술 변경 비용: 보옥 {ECONOMY_PRICES.skillChangeJewels}개 · 현재 기술: {SKILL_DEFINITIONS[skillId].name}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {skillOptions.map(([id, skill]) => <button key={id} type="button" disabled={id !== skillId && (inventory.jewels ?? 0) < ECONOMY_PRICES.skillChangeJewels} onClick={() => onChangeSkill(id)} className={`shrine-button text-left p-2 border rounded-xs text-xs ${id === skillId ? 'bg-[#164e63] border-[#38bdf8] text-[#e0f2fe]' : 'bg-[#10202d] border-[#36556b] text-[#d9c5a0]'} disabled:opacity-40`}><div className="font-bold">{skill.name} {id === skillId ? '· 장착 중' : ''}</div><div className="mt-0.5">{skill.type === 'area' ? '범위' : '단일'} · 공격력 ×{skill.multiplier.toFixed(2)}</div><div className="mt-0.5 text-[10px] opacity-80">{skill.description}</div></button>)}
+                <div className="text-[11px] text-[#d9c5a0]">장착 중인 기술만 표시 · 변경 비용: 보옥 {ECONOMY_PRICES.skillChangeJewels}개</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm text-[#e0f2fe] whitespace-nowrap">{SKILL_DEFINITIONS[skillId].name} · 장착 중</div>
+                    <div className="text-xs text-[#bae6fd] whitespace-nowrap">{SKILL_DEFINITIONS[skillId].type === 'area' ? '범위' : '단일'} · 공격력 ×{SKILL_DEFINITIONS[skillId].minMultiplier.toFixed(1)}~{SKILL_DEFINITIONS[skillId].maxMultiplier.toFixed(1)}</div>
+                  </div>
+                  <select aria-label="전투 기술 변경" value={skillId} disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.skillChangeJewels} onChange={(event) => onChangeSkill(event.target.value as SkillId)} className="max-w-[48%] bg-[#10202d] border border-[#38bdf8] rounded-xs px-2 py-2 text-xs text-[#e0f2fe] shrink-0">
+                    {skillOptions.map(([id, skill]) => <option key={id} value={id}>{skill.name}</option>)}
+                  </select>
                 </div>
               </div>
             </>
