@@ -39,6 +39,7 @@ import type {
   PlayerStats,
   Projectile,
   WorldEntity,
+  VillageEntityKind,
   ZoneId,
 } from '../game/types';
 import {
@@ -117,7 +118,7 @@ function nextId(prefix: string) {
   return `${prefix}-${entitySeq}`;
 }
 
-function createVillageEntities(): WorldEntity[] {
+function createVillageEntities(): (WorldEntity & { kind: VillageEntityKind })[] {
   return [
     {
       id: 'v-cauldron',
@@ -143,7 +144,7 @@ function createVillageEntities(): WorldEntity[] {
     {
       id: 'v-merchant',
       kind: 'village_merchant',
-      name: '마을 상점',
+      name: '마을 메뉴',
       x: 564,
       y: 205,
       vx: 0,
@@ -286,6 +287,8 @@ function createEventByCode(
         maxHp: 36,
         isHostile: false,
         isInteractable: true,
+        isElite: false,
+        damageMultiplier: 1,
         revealedBandit: false,
       };
     case 3:
@@ -309,6 +312,8 @@ function createEventByCode(
         maxHp: 20,
         isHostile: false,
         isInteractable: true,
+        isElite: false,
+        damageMultiplier: 1,
       };
     case 5:
     default:
@@ -320,6 +325,8 @@ function createEventByCode(
         maxHp: 20,
         isHostile: false,
         isInteractable: true,
+        isElite: false,
+        damageMultiplier: 1,
       };
   }
 }
