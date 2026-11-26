@@ -81,6 +81,9 @@ export interface WorldEntity {
   revealedBandit?: boolean;
   orbitAngle?: number;
   snowDusted?: boolean;
+  /** Per-entity animation clock and movement state for sprite motion. */
+  animTimer?: number;
+  isMoving?: boolean;
 }
 
 export interface Projectile {

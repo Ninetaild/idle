@@ -1183,6 +1183,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
             continue;
           }
+          ent.animTimer = (ent.animTimer ?? 0) + dt;
+          const animStartX = ent.x;
+          const animStartY = ent.y;
+          ent.isMoving = false;
           if (ent.hitFlashTimer > 0) ent.hitFlashTimer = Math.max(0, ent.hitFlashTimer - dt);
           if (ent.actionTimer > 0) {
             ent.actionTimer = Math.max(0, ent.actionTimer - dt);
@@ -1294,6 +1298,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             } else if (dist < 240 && ent.attackCooldown <= 0) {
               ent.telegraphTimer = 0.5;
             }
+          }
+
+          const movedX = ent.x - animStartX;
+          const movedY = ent.y - animStartY;
+          ent.isMoving = Math.hypot(movedX, movedY) > 0.05;
+          if (ent.isMoving && Math.abs(movedX) > 0.05) {
+            ent.dir = movedX < 0 ? 'left' : 'right';
+          } else if (ent.isMoving && Math.abs(movedY) > 0.05) {
+            ent.dir = movedY < 0 ? 'up' : 'down';
           }
         }
       }
@@ -1491,11 +1504,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             const drawH = isSmall ? 38 : 52;
             const halfW = drawW / 2;
             const halfH = drawH / 2;
-            const bob =
-              ent.kind === 'fairy_sylph' || ent.kind === 'yokai_tengu'
-                ? Math.sin(sim.ambientTimer * 5 + ent.x) * 4
-                : 0;
+            const animTime = ent.animTimer ?? sim.ambientTimer;
+            const isFlying = ent.kind === 'fairy_sylph' || ent.kind === 'yokai_tengu';
+            const walkCycle = animTime * (isFlying ? 10 : 13) + ent.x * 0.035;
+            const bob = isFlying
+              ? Math.sin(walkCycle) * 4
+              : ent.isMoving
+                ? Math.abs(Math.sin(walkCycle)) * -3.5
+                : Math.sin(animTime * 2.2 + ent.x * 0.02) * 1.2;
             const koOffsetY = ent.koTimer > 0 ? (0.35 - ent.koTimer) * 18 : 0;
+            const stride = ent.isMoving && ent.koTimer <= 0;
+            const squash = stride ? 1 + Math.sin(walkCycle * 2) * 0.045 : 1 + Math.sin(animTime * 2) * 0.012;
+            const stretch = stride ? 1 - Math.sin(walkCycle * 2) * 0.035 : 1;
+            const lean = ent.koTimer > 0 ? 0.22 : stride ? Math.sin(walkCycle) * 0.075 : Math.sin(animTime * 1.6) * 0.012;
 
             ctx.save();
             if (ent.koTimer > 0) {
@@ -1527,13 +1548,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               );
             }
 
-            ctx.drawImage(
-              spr,
-              ent.x - halfW,
-              ent.y - halfH + bob + koOffsetY,
-              drawW,
-              drawH
-            );
+            // Transform around the feet/ground anchor: enemies now face their
+            // horizontal travel direction and have a looping walk/breath cycle.
+            ctx.translate(ent.x, ent.y + bob + koOffsetY);
+            ctx.rotate(lean);
+            ctx.scale(ent.dir === 'left' ? -squash : squash, stretch);
+            ctx.drawImage(spr, -halfW, -halfH, drawW, drawH);
 
             // Light snow dusting resting on top of field elements in Snowy Forest
             if (curField === 'snowy_forest' && curZone === 'field' && ent.koTimer <= 0) {
