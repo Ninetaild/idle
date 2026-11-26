@@ -5,6 +5,9 @@ export type ZoneId = 'village' | 'field';
 export type FieldId = 'forest' | 'plains' | 'river' | 'snowy_forest';
 
 export type MikoSkinId = 'default' | 'winter_miko';
+export type AbilityId = 'attack_power' | 'max_hp' | 'gold_gain' | 'attack_frequency' | 'attack_speed';
+export type SkillId = 'foxfire_burst' | 'purification_bolt' | 'frost_ring' | 'wind_slash';
+export interface AbilityRoll { id: AbilityId; multiplier: number; }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -34,6 +37,8 @@ export interface Inventory {
   elixirs: number;     // 효능 있는 단약
   dudPills: number;    // 효과 없는 약
   snowflakes: number;  // 이벤트 재화: 눈송이
+  eventTokens?: number;
+  jewels?: number;
 }
 
 export interface PlayerStats {
@@ -49,6 +54,9 @@ export interface PlayerStats {
   totalGathered: number;
   unlockedSkins: MikoSkinId[];
   equippedSkin: MikoSkinId;
+  abilities?: AbilityRoll[];
+  equippedSkill?: SkillId;
+  fieldDifficulties?: Record<FieldId, number>;
 }
 
 export interface LogEntry {
@@ -78,6 +86,8 @@ export interface WorldEntity {
   koTimer: number;
   isHostile: boolean;
   isInteractable: boolean;
+  isElite?: boolean;
+  damageMultiplier?: number;
   revealedBandit?: boolean;
   orbitAngle?: number;
   snowDusted?: boolean;
@@ -96,6 +106,8 @@ export interface Projectile {
   vy: number;
   damage: number;
   life: number;
+  splashRadius?: number;
+  skillName?: string;
 }
 
 export interface Particle {
