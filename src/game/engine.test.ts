@@ -18,6 +18,8 @@ import {
   imbueCharm,
   getFieldDifficulty,
   setFieldDifficulty,
+  rollSkillMultiplier,
+  SKILL_DEFINITIONS,
   craftElixirFromHerb,
   createInitialInventory,
   createInitialStats,
@@ -293,4 +295,21 @@ test('ability imprint spends a jewel and grants three distinct abilities with me
   assert.equal(new Set(result.stats.abilities?.map((ability) => ability.id)).size, 3);
   const values = (result.stats.abilities ?? []).map((ability) => ability.multiplier).sort((a, b) => a - b);
   assert.equal(values[1], 1.3);
+});
+
+
+test('equipped skills roll within the correct damage range for their type', () => {
+  assert.equal(rollSkillMultiplier('foxfire_burst', () => 0), 0.7);
+  assert.equal(rollSkillMultiplier('foxfire_burst', () => 0.999999), 1.0);
+  assert.equal(rollSkillMultiplier('purification_bolt', () => 0), 1.2);
+  assert.equal(rollSkillMultiplier('purification_bolt', () => 0.999999), 1.5);
+  for (const skill of Object.values(SKILL_DEFINITIONS)) {
+    const low = skill.type === 'area' ? 0.7 : 1.2;
+    const high = skill.type === 'area' ? 1.0 : 1.5;
+    const rolled = rollSkillMultiplier(
+      Object.entries(SKILL_DEFINITIONS).find(([, value]) => value === skill)![0] as keyof typeof SKILL_DEFINITIONS,
+      () => 0.5
+    );
+    assert.ok(rolled >= low && rolled <= high);
+  }
 });
