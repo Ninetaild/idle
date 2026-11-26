@@ -15,6 +15,9 @@ import { computePixelViewport, screenToWorld } from './viewport';
 import { getVisiblePixelBounds } from './hdAssets';
 import {
   attemptEnhanceCharm,
+  imbueCharm,
+  getFieldDifficulty,
+  setFieldDifficulty,
   craftElixirFromHerb,
   createInitialInventory,
   createInitialStats,
@@ -86,33 +89,20 @@ test('weighted tables match specified probabilities accurately', () => {
   assert.equal(rollWeighted(SNOWFLAKE_DROP_TABLE, () => 0.5).code, 3);
 });
 
-test('charm enhancement scales cost by 1.2x and draws from stage success/maintain/downgrade pool', () => {
-  let stats = { ...createInitialStats(), gold: 500 }; // cost starts at 60
+test('charm enhancement has only success/maintain and multiplies attack and cost by 1.1', () => {
+  const stats = { ...createInitialStats(), gold: 10000 };
   const inv = createInitialInventory();
-
-  // Level 0: success -> level +1, cost * 1.2 = 72
-  const step1 = attemptEnhanceCharm(stats, inv, () => 0.1);
-  assert.equal(step1.code, 'success');
-  assert.equal(step1.stats.enhanceLevel, 1);
-  assert.equal(step1.stats.enhanceCost, 72);
-  assert.equal(step1.stats.gold, 440);
-
-  // Level 1 pool: check weights sum cleanly to 1
-  const pool1 = getEnhancePool(1);
-  const sum = pool1.reduce((acc, e) => acc + e.per, 0);
-  assert.ok(Math.abs(sum - 1) < 0.01);
-
-  // Level 1: maintain -> level stays 1, cost * 1.2 = 86
-  const step2 = attemptEnhanceCharm(step1.stats, inv, () => 0.78);
-  assert.equal(step2.code, 'maintain');
-  assert.equal(step2.stats.enhanceLevel, 1);
-  assert.equal(step2.stats.enhanceCost, 86);
-
-  // Level 1: downgrade -> level drops to 0, cost * 1.2 = 103
-  const step3 = attemptEnhanceCharm(step2.stats, inv, () => 0.95);
-  assert.equal(step3.code, 'downgrade');
-  assert.equal(step3.stats.enhanceLevel, 0);
-  assert.equal(step3.stats.enhanceCost, 103);
+  const success = attemptEnhanceCharm(stats, inv, () => 0);
+  assert.equal(success.stats.enhanceLevel, 1);
+  assert.equal(success.stats.attackPower, 15.4);
+  assert.equal(success.stats.enhanceCost, 66);
+  const pool = getEnhancePool(1);
+  assert.deepEqual(pool.map((entry) => entry.code), ['success', 'maintain']);
+  assert.equal(pool.reduce((sum, entry) => sum + entry.per, 0), 1);
+  const maintain = attemptEnhanceCharm(stats, inv, () => 0.99);
+  assert.equal(maintain.stats.enhanceLevel, 0);
+  assert.equal(maintain.stats.attackPower, stats.attackPower);
+  assert.equal(maintain.stats.enhanceCost, 66);
 });
 
 test('tiered herb gathering, berry eating, and alchemy outcomes apply accurately', () => {
@@ -285,4 +275,22 @@ test('priority target overrides nearest auto-target until resolved', () => {
 
   const prioritized = selectAutoOrPriorityTarget(0, 0, [nearHerb, farBerry], 'berry-1');
   assert.equal(prioritized?.id, 'berry-1');
+});
+
+
+test('field difficulty is independently clamped for each field', () => {
+  const stats = setFieldDifficulty(createInitialStats(), 'forest', 12);
+  assert.equal(getFieldDifficulty(stats, 'forest'), 10);
+  assert.equal(getFieldDifficulty(stats, 'river'), 1);
+});
+
+test('ability imprint spends a jewel and grants three distinct abilities with median 1.3', () => {
+  const stats = createInitialStats();
+  const inventory = { ...createInitialInventory(), jewels: 1 };
+  const result = imbueCharm(stats, inventory, () => 0.5);
+  assert.equal(result.inventory.jewels, 0);
+  assert.equal(result.stats.abilities?.length, 3);
+  assert.equal(new Set(result.stats.abilities?.map((ability) => ability.id)).size, 3);
+  const values = (result.stats.abilities ?? []).map((ability) => ability.multiplier).sort((a, b) => a - b);
+  assert.equal(values[1], 1.3);
 });
