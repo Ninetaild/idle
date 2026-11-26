@@ -30,6 +30,7 @@ import { soundEngine } from '../game/sound';
 import type {
   ActorAction,
   Direction,
+  FieldEntityKind,
   FieldId,
   GameScreenState,
   GameSnapshot,
@@ -113,6 +114,8 @@ function drawOutlinedText(
   ctx.fillText(text, x, y);
 }
 
+type FieldWorldEntity = Omit<WorldEntity, 'kind'> & { kind: FieldEntityKind };
+
 function nextId(prefix: string) {
   entitySeq += 1;
   return `${prefix}-${entitySeq}`;
@@ -194,7 +197,7 @@ function getPlayableFieldBounds(fieldId: FieldId) {
 function createYokaiByCode(
   base: WorldEntity,
   speciesCode: 1 | 2 | 3 | 4 | 5 | 6
-): WorldEntity {
+): FieldWorldEntity {
   switch (speciesCode) {
     case 1:
       return {
@@ -263,7 +266,7 @@ function createYokaiByCode(
 function createEventByCode(
   base: WorldEntity,
   eventCode: 1 | 2 | 3 | 4 | 5
-): WorldEntity {
+): FieldWorldEntity {
   switch (eventCode) {
     case 1:
       return {
@@ -337,7 +340,7 @@ function spawnRandomFieldEntity(
   fieldId: FieldId,
   existingEntities: readonly WorldEntity[] = [],
   difficultyLevel = 1
-): WorldEntity | null {
+): FieldWorldEntity | null {
   const bounds = getPlayableFieldBounds(fieldId);
   for (let spawnAttempt = 0; spawnAttempt < 16; spawnAttempt++) {
     const rolled = rollWeighted(FIELD_SPAWN_TABLE);
@@ -360,7 +363,7 @@ function spawnRandomFieldEntity(
       snowDusted: fieldId === 'snowy_forest',
     };
 
-    let candidate: WorldEntity;
+    let candidate: FieldWorldEntity;
     if (rolled.code === 1) {
       candidate = { ...base, kind: 'berry', name: '알 수 없는 열매' };
     } else if (rolled.code === 2) {
