@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { getFoxMikoAsset, getEventMikoAsset } from '../game/hdAssets';
-import { ABILITY_LABELS, ECONOMY_PRICES, FIELD_METADATA, getSkillMultiplier, SKILL_DEFINITIONS } from '../game/logic';
-import { getDifficultyMultiplier, getEliteTable, getEnhancePool } from '../game/probability';
-import type { AbilityRoll, FieldId, Inventory, MikoSkinId, PlayerStats } from '../game/types';
+import { ECONOMY_PRICES, EQUIPMENT_IDS, FIELD_METADATA, getSkillMultiplier, SKILL_DEFINITIONS } from '../game/logic';
+import { getDifficultyMultiplier, getEliteTable } from '../game/probability';
+import { EquipmentCard } from './EquipmentCard';
+import type { AbilityRoll, EquipmentId, FieldId, Inventory, MikoSkinId, PlayerStats } from '../game/types';
 import type { VillageStationId } from './GameHud';
 
 interface VillageModalsProps {
@@ -17,11 +18,12 @@ interface VillageModalsProps {
   onCraftBatch: () => void;
   onSellItem: (item: 'elixir' | 'dudPill', qty: number) => void;
   onSellHerbs: (qty: number) => void;
-  onEnhanceCharm: () => void;
-  onImbueCharm: () => void;
+  onEnhance: (equipment: EquipmentId) => void;
+  onImbue: (equipment: EquipmentId) => void;
+  onExchangeGoodDeeds: () => void;
   onConvertSkill: () => void;
   /** Rolled options awaiting the player's decision (memorial). */
-  pendingAbilities: AbilityRoll[] | null;
+  pendingAbilities: { equipment: EquipmentId; abilities: AbilityRoll[] } | null;
   onKeepAbilities: () => void;
   onAcceptAbilities: () => void;
   onSetFieldDifficulty: (fieldId: FieldId, level: number) => void;
@@ -85,8 +87,9 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
   onCraftBatch,
   onSellItem,
   onSellHerbs,
-  onEnhanceCharm,
-  onImbueCharm,
+  onEnhance,
+  onImbue,
+  onExchangeGoodDeeds,
   onConvertSkill,
   pendingAbilities,
   onKeepAbilities,
@@ -101,20 +104,16 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
   const openFields: FieldId[] = ['forest', 'plains', 'river'];
   const eventFields: FieldId[] = ['snowy_forest'];
 
-  const enhancePool = getEnhancePool(stats.enhanceLevel);
-  const successPct = Math.round((enhancePool.find((e) => e.code === 'success')?.per ?? 0) * 100);
-  const maintainPct = Math.round((enhancePool.find((e) => e.code === 'maintain')?.per ?? 0) * 100);
   const skillId = stats.equippedSkill ?? 'foxfire_burst';
   const skill = SKILL_DEFINITIONS[skillId];
   const rewardHint = (level: number) =>
     `재화 ×${getDifficultyMultiplier(level).toFixed(2)} · 강적 ${(getEliteTable(level)[1].per * 100).toFixed(1)}%`;
-  const abilityList = stats.abilities ?? [];
 
   const modalTitle =
     activeStation === 'alchemy'
       ? '단약 연단 화로'
       : activeStation === 'merchant'
-        ? '마을 메뉴 · 부적 강화'
+        ? '마을 메뉴 · 장비 강화'
         : activeStation === 'event_shop'
           ? '겨울 이벤트 상점'
           : '산책할 필드 선택';
@@ -324,7 +323,7 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
           {activeStation === 'merchant' && (
             <>
               <p className="text-[#e6d5b8]">
-                단약과 효과 없는 약을 팔아 엽전을 모으고, 퇴마 부적을 단계별로 강화할 수 있습니다.
+                단약과 효과 없는 약을 팔아 엽전을 모으고, 장비 3종을 강화하고 옵션을 부여할 수 있습니다.
               </p>
 
               <div className="flex items-center justify-between py-2 px-3 bg-[#140f0e] border border-[#4a3728] rounded-xs font-mono-num text-xs">
@@ -419,54 +418,17 @@ export const VillageModals: React.FC<VillageModalsProps> = ({
                   </div>
                 </div>
 
-                <div className="p-3 bg-[#1c2822] border border-[#4ade80]/50 rounded-xs space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-[#86efac]">
-                        퇴마 부적 강화 (+{stats.enhanceLevel}단계)
-                      </div>
-                      <div className="text-xs text-[#e6d5b8] font-mono-num mt-0.5">
-                        현재 공격력 {stats.attackPower} · 다음 강화 비용 {stats.enhanceCost}엽전
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={stats.gold < stats.enhanceCost}
-                      onClick={onEnhanceCharm}
-                      className="shrine-button px-3.5 py-2 text-xs font-bold bg-[#2a4a37] hover:bg-[#366047] disabled:opacity-40 border border-[#4ade80] text-[#d1fae5] rounded-xs whitespace-nowrap shrink-0 cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      강화 시도
-                    </button>
+                <div className="text-[11px] text-[#d9c5a0]">보유 보옥: {inventory.jewels ?? 0}개 · 옵션은 5종 중 3종 무작위 · 배율 1.1~1.5 · 장비 간 같은 옵션은 곱연산</div>
+                {EQUIPMENT_IDS.map((equipment) => (
+                  <EquipmentCard key={equipment} equipment={equipment} stats={stats} inventory={inventory} pending={pendingAbilities} onEnhance={onEnhance} onImbue={onImbue} onKeep={onKeepAbilities} onAccept={onAcceptAbilities} />
+                ))}
+                <div className="flex items-center justify-between gap-3 p-3 bg-[#241b18] border border-[#6b4f3a] rounded-xs">
+                  <div className="min-w-0">
+                    <div className="font-bold text-sm text-[#fde68a]">선행 교환</div>
+                    <div className="text-xs text-[#d9c5a0] font-mono-num">보유 선행 {stats.goodDeeds} · 선행 {ECONOMY_PRICES.goodDeedsPerJewel} → 보옥 1개</div>
                   </div>
-
-                  <div className="flex items-center justify-between text-[11px] font-mono-num px-2.5 py-1.5 bg-[#121916] border border-[#2f4b3b] rounded-xs text-[#d9c5a0]">
-                    <span className="text-[#86efac]">성공 {successPct}%</span>
-                    <span className="text-[#fde68a]">유지 {maintainPct}%</span>
-                    <span className="text-[#bae6fd]">다음 비용 1.1배</span>
-                  </div>
+                  <button type="button" disabled={stats.goodDeeds < ECONOMY_PRICES.goodDeedsPerJewel} onClick={onExchangeGoodDeeds} className="shrine-button px-3 py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] disabled:opacity-40 border border-[#c4b5fd] text-[#ede9fe] rounded-xs whitespace-nowrap shrink-0 cursor-pointer disabled:cursor-not-allowed">보옥으로 교환</button>
                 </div>
-                <button type="button" disabled={(inventory.jewels ?? 0) < ECONOMY_PRICES.abilityImprintJewels} onClick={onImbueCharm} hidden={pendingAbilities !== null} className="shrine-button w-full py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] disabled:opacity-40 border border-[#c4b5fd] text-[#ede9fe] rounded-xs">능력 부여 · 보옥 {ECONOMY_PRICES.abilityImprintJewels}개</button>
-                <div className="text-[11px] text-[#d9c5a0]">보유 보옥: {inventory.jewels ?? 0}개 · 5종 중 3종 무작위 · 배율 1.1~1.5 (중위값 1.3)</div>
-                {pendingAbilities ? (
-                  <div role="group" aria-label="옵션 메모리얼" className="p-3 bg-[#1d1630] border border-[#c4b5fd] rounded-xs space-y-2">
-                    <div className="text-xs font-bold text-[#ede9fe]">메모리얼 · 어느 옵션을 남길까요?</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([['이전 옵션', abilityList], ['새 옵션', pendingAbilities]] as const).map(([title, list]) => (
-                        <div key={title} className="p-2 bg-[#121916] border border-[#4b3475] rounded-xs text-[11px] text-[#ddd6fe] space-y-1">
-                          <div className="font-bold text-[#fde68a]">{title}</div>
-                          {list.map((ability) => <div key={ability.id}>{ABILITY_LABELS[ability.id]} ×{ability.multiplier.toFixed(2)}</div>)}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" autoFocus onClick={onKeepAbilities} className="shrine-button flex-1 py-2 text-xs font-bold bg-[#d93829] hover:bg-[#e54839] border border-[#f3ca52] text-white rounded-xs cursor-pointer">이전으로 되돌리기 (기본)</button>
-                      <button type="button" onClick={onAcceptAbilities} className="shrine-button flex-1 py-2 text-xs font-bold bg-[#4b3475] hover:bg-[#604397] border border-[#c4b5fd] text-[#ede9fe] rounded-xs cursor-pointer">새 옵션 적용</button>
-                    </div>
-                    <div className="text-[10px] text-[#d9c5a0]">창을 닫으면 이전 옵션이 유지됩니다. 사용한 보옥은 돌려받지 않습니다.</div>
-                  </div>
-                ) : (
-                  abilityList.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">{abilityList.map((ability) => <div key={ability.id} className="px-2 py-1.5 bg-[#121916] border border-[#4b3475] rounded-xs text-[11px] text-[#ddd6fe]">{ABILITY_LABELS[ability.id]} ×{ability.multiplier.toFixed(2)}</div>)}</div>
-                )}
               </div>
               <div className="p-3 bg-[#172838] border border-[#38bdf8]/60 rounded-xs space-y-2">
                 <div className="font-bold text-sm text-[#bae6fd]">전투 기술</div>

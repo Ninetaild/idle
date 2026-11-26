@@ -7,6 +7,7 @@ export type FieldId = 'forest' | 'plains' | 'river' | 'snowy_forest';
 export type MikoSkinId = 'default' | 'winter_miko';
 export type AbilityId = 'attack_power' | 'max_hp' | 'gold_gain' | 'attack_frequency' | 'attack_speed';
 export type SkillId = 'foxfire_burst' | 'purification_bolt' | 'frost_ring' | 'wind_slash';
+export type EquipmentId = 'weapon' | 'armor' | 'accessory';
 export interface AbilityRoll { id: AbilityId; multiplier: number; }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -60,7 +61,12 @@ export interface PlayerStats {
   totalGathered: number;
   unlockedSkins: MikoSkinId[];
   equippedSkin: MikoSkinId;
+  /** Options imprinted on the weapon. */
   abilities?: AbilityRoll[];
+  armorLevel?: number;
+  armorAbilities?: AbilityRoll[];
+  accessoryLevel?: number;
+  accessoryAbilities?: AbilityRoll[];
   equippedSkill?: SkillId;
   /** Damage multiplier fixed by the latest technique conversion. */
   skillMultiplier?: number;

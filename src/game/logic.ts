@@ -3,7 +3,7 @@ import {
   ANCIENT_STONE_TABLE,
   BERRY_EFFECT_TABLE,
   FIELD_EVENT_TABLE,
-  getEnhancePool,
+  getEquipmentEnhancePool,
   HERB_GATHER_TABLE,
   rollWeighted,
   SNOWFLAKE_DROP_TABLE,
@@ -18,6 +18,7 @@ import type {
   AbilityId,
   SkillId,
   AbilityRoll,
+  EquipmentId,
 } from './types';
 
 export const ECONOMY_PRICES = {
@@ -25,6 +26,7 @@ export const ECONOMY_PRICES = {
   dudPillSell: 5,
   baseEnhanceCost: 60,
   enhanceCostMultiplier: 1.1,
+  goodDeedsPerJewel: 10,
   abilityImprintJewels: 1,
   skillChangeJewels: 1,
   winterMikoSnowflakes: 500,
@@ -35,21 +37,22 @@ export const STOMACHACHE_DURATION_SEC = 2;
 export const PLAYER_RANGED_ATTACK_COOLDOWN_SEC = 10;
 /** Maximum number of living field entities of each kind. */
 export const FIELD_ENTITY_LIMITS: Readonly<Record<FieldEntityKind, number>> = {
-  herb: 4,
-  berry: 3,
-  yokai_dokkaebi: 2,
-  fairy_sylph: 2,
-  yokai_gumiho: 2,
-  yokai_tengu: 2,
-  yokai_kappa: 2,
-  yokai_yukionna: 2,
+  herb: 10,
+  berry: 1,
+  yokai_dokkaebi: 10,
+  fairy_sylph: 10,
+  yokai_gumiho: 10,
+  yokai_tengu: 10,
+  yokai_kappa: 10,
+  yokai_yukionna: 10,
   event_injured: 1,
-  event_bandit: 1,
+  event_bandit: 10,
   event_fox_shrine: 1,
-  event_ancient_stone: 1,
-  event_peddler: 1,
+  event_ancient_stone: 10,
+  event_peddler: 10,
 };
-export const MAX_FIELD_ENTITY_TOTAL = 16;
+export const MAX_FIELD_ENTITY_TOTAL = 40;
+export const INITIAL_FIELD_ENTITY_COUNT = 24;
 
 export function canSpawnEntityKind(kind: FieldEntityKind, entities: readonly WorldEntity[], maxCount = FIELD_ENTITY_LIMITS[kind]): boolean {
   return entities.filter((entity) => entity.kind === kind && entity.hp > 0 && entity.koTimer <= 0).length < maxCount;
@@ -116,6 +119,10 @@ export function createInitialStats(): PlayerStats {
     unlockedSkins: ['default'],
     equippedSkin: 'default',
     abilities: [],
+    armorLevel: 0,
+    armorAbilities: [],
+    accessoryLevel: 0,
+    accessoryAbilities: [],
     equippedSkill: 'foxfire_burst',
     fieldDifficulties: { forest: 1, plains: 1, river: 1, snowy_forest: 1 },
   };
@@ -197,7 +204,7 @@ export function sellPillsToMerchant(
 
   const unitPrice =
     item === 'elixir' ? ECONOMY_PRICES.elixirSell : ECONOMY_PRICES.dudPillSell;
-  const earned = Math.round(sellQty * unitPrice * getAbilityMultiplier(stats, 'gold_gain'));
+  const earned = Math.round(sellQty * unitPrice * getGoldMultiplier(stats));
 
   return {
     stats: {
@@ -215,22 +222,86 @@ export function sellPillsToMerchant(
   };
 }
 
-/**
- * Charm enhancement: success increases attack power by 10%; failure only maintains.
- */
+export const EQUIPMENT_IDS: readonly EquipmentId[] = ['weapon', 'armor', 'accessory'];
+export const EQUIPMENT_LABELS: Record<EquipmentId, string> = {
+  weapon: '퇴마 부적', armor: '수호 무녀복', accessory: '복주머니 장신구',
+};
+export const BASE_DEFENSE = 10;
+/** Every successful enhancement multiplies the equipment's stat by this. */
+export const ENHANCE_STAT_MULTIPLIER = 1.1;
+
+export function getEnhanceLevel(stats: PlayerStats, equipment: EquipmentId): number {
+  if (equipment === 'weapon') return stats.enhanceLevel;
+  return (equipment === 'armor' ? stats.armorLevel : stats.accessoryLevel) ?? 0;
+}
+export function getEnhanceCost(stats: PlayerStats, equipment: EquipmentId): number {
+  if (equipment === 'weapon') return stats.enhanceCost;
+  return Math.round(ECONOMY_PRICES.baseEnhanceCost * Math.pow(ECONOMY_PRICES.enhanceCostMultiplier, getEnhanceLevel(stats, equipment)));
+}
+export function getDefense(stats: PlayerStats): number {
+  return BASE_DEFENSE * Math.pow(ENHANCE_STAT_MULTIPLIER, stats.armorLevel ?? 0);
+}
+/** Incoming damage is scaled by 100 / (100 + defense). */
+export function mitigateDamage(stats: PlayerStats, damage: number): number {
+  return damage * 100 / (100 + getDefense(stats));
+}
+export function getAccessoryGoldMultiplier(stats: PlayerStats): number {
+  return Math.pow(ENHANCE_STAT_MULTIPLIER, stats.accessoryLevel ?? 0);
+}
+/** Total coin multiplier: imprinted options times the accessory enhancement. */
+export function getGoldMultiplier(stats: PlayerStats): number {
+  return getAbilityMultiplier(stats, 'gold_gain') * getAccessoryGoldMultiplier(stats);
+}
+
+function scaleMaxHp(stats: PlayerStats, factor: number): Pick<PlayerStats, 'hp' | 'maxHp'> {
+  // Kept at 4 decimals so repeated option swaps do not drift; the HUD rounds.
+  const round = (value: number) => Number(value.toFixed(4));
+  const maxHp = round(stats.maxHp * factor);
+  return { maxHp, hp: Math.min(maxHp, round(stats.hp * factor)) };
+}
+
+/** Success raises the equipment stat by 1.1x and the next cost; failure only maintains. */
+export function attemptEnhance(stats: PlayerStats, inventory: Inventory, equipment: EquipmentId, rng: () => number = Math.random): ActionOutcome {
+  const cost = getEnhanceCost(stats, equipment);
+  if (stats.gold < cost) return { stats, inventory, message: `엽전이 부족합니다. (필요: ${cost}엽전)`, tone: 'warning', code: 'insufficient' };
+  const level = getEnhanceLevel(stats, equipment);
+  const rolled = rollWeighted(getEquipmentEnhancePool(equipment, level), rng);
+  const paid = { ...stats, gold: stats.gold - cost };
+  const name = EQUIPMENT_LABELS[equipment];
+  if (rolled.code !== 'success') {
+    return { stats: paid, inventory, message: `${name} 강화 유지. (+${level}단계)`, tone: 'neutral', code: rolled.code };
+  }
+  const nextLevel = level + 1;
+  let next: PlayerStats;
+  let detail: string;
+  if (equipment === 'weapon') {
+    const attackPower = Number((stats.attackPower * ENHANCE_STAT_MULTIPLIER).toFixed(2));
+    const enhanceCost = Math.round(ECONOMY_PRICES.baseEnhanceCost * Math.pow(ECONOMY_PRICES.enhanceCostMultiplier, nextLevel));
+    next = { ...paid, enhanceLevel: nextLevel, enhanceCost, attackPower };
+    detail = `공격력 ${attackPower}`;
+  } else if (equipment === 'armor') {
+    next = { ...paid, armorLevel: nextLevel, ...scaleMaxHp(paid, ENHANCE_STAT_MULTIPLIER) };
+    detail = `방어력 ${getDefense(next).toFixed(1)} · 최대 체력 ${Math.round(next.maxHp)}`;
+  } else {
+    next = { ...paid, accessoryLevel: nextLevel };
+    detail = `재화 획득 ×${getAccessoryGoldMultiplier(next).toFixed(2)}`;
+  }
+  return { stats: next, inventory, message: `${name} 강화 성공! (+${nextLevel}단계 · ${detail})`, tone: 'positive', code: 'success' };
+}
+
 export function attemptEnhanceCharm(stats: PlayerStats, inventory: Inventory, rng: () => number = Math.random): ActionOutcome {
-  if (stats.gold < stats.enhanceCost) return { stats, inventory, message: `엽전이 부족합니다. (필요: ${stats.enhanceCost}엽전)`, tone: 'warning', code: 'insufficient' };
-  const rolled = rollWeighted(getEnhancePool(stats.enhanceLevel), rng);
-  const success = rolled.code === 'success';
-  const nextLevel = stats.enhanceLevel + (success ? 1 : 0);
-  const nextAttack = success ? Number((stats.attackPower * 1.1).toFixed(2)) : stats.attackPower;
-  const nextCost = Math.round(ECONOMY_PRICES.baseEnhanceCost * Math.pow(ECONOMY_PRICES.enhanceCostMultiplier, nextLevel));
+  return attemptEnhance(stats, inventory, 'weapon', rng);
+}
+
+/** Trades accumulated good deeds for one jewel. */
+export function exchangeGoodDeeds(stats: PlayerStats, inventory: Inventory): ActionOutcome {
+  const price = ECONOMY_PRICES.goodDeedsPerJewel;
+  if (stats.goodDeeds < price) return { stats, inventory, message: `선행이 부족합니다. (${stats.goodDeeds}/${price})`, tone: 'warning', code: 'insufficient' };
   return {
-    stats: { ...stats, gold: stats.gold - stats.enhanceCost, enhanceLevel: nextLevel, enhanceCost: nextCost, attackPower: nextAttack },
-    inventory,
-    message: success ? `강화 성공! 공격력이 1.1배 증가했습니다. (+${nextLevel}단계 · 공격력 ${nextAttack})` : `강화 유지. 기운이 그대로 머물렀습니다. (+${nextLevel}단계)`,
-    tone: success ? 'positive' : 'neutral',
-    code: rolled.code,
+    stats: { ...stats, goodDeeds: stats.goodDeeds - price },
+    inventory: { ...inventory, jewels: (inventory.jewels ?? 0) + 1 },
+    message: `선행 ${price}을 보옥 1개로 교환했습니다.`,
+    tone: 'positive', code: 'exchanged',
   };
 }
 
@@ -260,8 +331,14 @@ export function rollSkillMultiplier(skillId: SkillId, rng: () => number = Math.r
   return Number((skill.minMultiplier + (skill.maxMultiplier - skill.minMultiplier) * roll).toFixed(2));
 }
 
+export function getEquipmentAbilities(stats: PlayerStats, equipment: EquipmentId): AbilityRoll[] {
+  const key = equipment === 'weapon' ? 'abilities' : equipment === 'armor' ? 'armorAbilities' : 'accessoryAbilities';
+  return stats[key] ?? [];
+}
+/** The same option on several pieces of equipment multiplies together. */
 export function getAbilityMultiplier(stats: PlayerStats, id: AbilityId): number {
-  return stats.abilities?.find((ability) => ability.id === id)?.multiplier ?? 1;
+  return EQUIPMENT_IDS.reduce((total, equipment) =>
+    total * (getEquipmentAbilities(stats, equipment).find((ability) => ability.id === id)?.multiplier ?? 1), 1);
 }
 export function getFieldDifficulty(stats: PlayerStats, fieldId: FieldId): number {
   return Math.max(1, Math.min(10, Math.floor(stats.fieldDifficulties?.[fieldId] ?? 1)));
@@ -298,13 +375,12 @@ export function imbueCharm(stats: PlayerStats, inventory: Inventory, rng: () => 
   };
 }
 
-/** Equips a set of options, keeping the current HP ratio when max HP changes. */
-export function applyAbilities(stats: PlayerStats, abilities: AbilityRoll[]): PlayerStats {
-  const oldHp = getAbilityMultiplier(stats, 'max_hp');
-  const newHp = abilities.find((ability) => ability.id === 'max_hp')?.multiplier ?? 1;
-  const hpRatio = stats.maxHp > 0 ? stats.hp / stats.maxHp : 1;
-  const nextMaxHp = Math.round((stats.maxHp / oldHp) * newHp);
-  return { ...stats, abilities, maxHp: nextMaxHp, hp: Math.min(nextMaxHp, Math.round(nextMaxHp * hpRatio)) };
+/** Imprints a set of options on one piece of equipment, keeping the HP ratio when max HP changes. */
+export function applyAbilities(stats: PlayerStats, abilities: AbilityRoll[], equipment: EquipmentId = 'weapon'): PlayerStats {
+  const key = equipment === 'weapon' ? 'abilities' : equipment === 'armor' ? 'armorAbilities' : 'accessoryAbilities';
+  const next: PlayerStats = { ...stats, [key]: abilities };
+  const factor = getAbilityMultiplier(next, 'max_hp') / getAbilityMultiplier(stats, 'max_hp');
+  return { ...next, ...scaleMaxHp(stats, factor) };
 }
 
 /** Fixed multiplier of the equipped technique (range midpoint before the first conversion). */
@@ -384,7 +460,7 @@ export function eatFieldBerry(
   }
 
   const healMap: Record<number, number> = { 2: 8, 3: 14, 4: 22, 5: 35 };
-  const goldBonus = rolled.code === 5 ? Math.round(15 * getAbilityMultiplier(stats, 'gold_gain') * rewardMultiplier) : 0;
+  const goldBonus = rolled.code === 5 ? Math.round(15 * getGoldMultiplier(stats) * rewardMultiplier) : 0;
 
   return {
     stats: {
@@ -410,7 +486,7 @@ export function resolveFieldEvent(
   rng: () => number = Math.random,
   rewardMultiplier = 1
 ): ActionOutcome & { triggerCombat: boolean } {
-  const reward = (base: number) => Math.round(base * getAbilityMultiplier(stats, 'gold_gain') * rewardMultiplier);
+  const reward = (base: number) => Math.round(base * getGoldMultiplier(stats) * rewardMultiplier);
   const chosenCode = eventCode ?? rollWeighted(FIELD_EVENT_TABLE, rng).code;
 
   if (chosenCode === 2) {
@@ -678,7 +754,7 @@ export function sellHerbsToMerchant(
       code: 0,
     };
   }
-  const earned = Math.round(sellQty * ECONOMY_PRICES.herbSell * getAbilityMultiplier(stats, 'gold_gain'));
+  const earned = Math.round(sellQty * ECONOMY_PRICES.herbSell * getGoldMultiplier(stats));
   return {
     stats: { ...stats, gold: stats.gold + earned },
     inventory: { ...inventory, herbs: inventory.herbs - sellQty },

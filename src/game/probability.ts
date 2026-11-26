@@ -151,6 +151,17 @@ export const SNOWFLAKE_DROP_TABLE: readonly WeightedEntry<1 | 2 | 3>[] = [
  */
 export type EnhanceOutcomeCode = 'success' | 'maintain';
 
+export const ACCESSORY_SUCCESS_RATE = 0.01;
+
+/** Weapon and armor share the level-based odds; the accessory is always 1% / 99%. */
+export function getEquipmentEnhancePool(equipment: 'weapon' | 'armor' | 'accessory', level: number): readonly WeightedEntry<EnhanceOutcomeCode>[] {
+  if (equipment !== 'accessory') return getEnhancePool(level);
+  return [
+    { code: 'success', text: '강화 성공!', per: ACCESSORY_SUCCESS_RATE },
+    { code: 'maintain', text: '강화 유지.', per: 1 - ACCESSORY_SUCCESS_RATE },
+  ];
+}
+
 export function getEnhancePool(level: number): readonly WeightedEntry<EnhanceOutcomeCode>[] {
   const success = level <= 0 ? 0.85 : Math.max(0.2, Number((0.8 - level * 0.08).toFixed(2)));
   const maintain = Number((1 - success).toFixed(2));

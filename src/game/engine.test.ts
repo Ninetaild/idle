@@ -10,6 +10,7 @@ import {
   getDifficultyMultiplier,
   getEliteTable,
   getEnhancePool,
+  getEquipmentEnhancePool,
   HERB_GATHER_TABLE,
   rollWeighted,
   SNOWFLAKE_DROP_TABLE,
@@ -19,6 +20,13 @@ import { getVisiblePixelBounds } from './hdAssets';
 import {
   attemptEnhanceCharm,
   imbueCharm,
+  attemptEnhance,
+  exchangeGoodDeeds,
+  getAbilityMultiplier,
+  getDefense,
+  getEnhanceCost,
+  getGoldMultiplier,
+  mitigateDamage,
   applyAbilities,
   convertSkill,
   getSkillMultiplier,
@@ -247,6 +255,9 @@ test('a field entity kind cannot spawn beyond its own limit', () => {
   const fullHerbs = Array.from({ length: FIELD_ENTITY_LIMITS.herb }, (_, i) => ({ ...herb, id: `herb-cap-${i}` }));
   assert.equal(canSpawnEntityKind('herb', fullHerbs), false);
   assert.equal(canSpawnEntityKind('berry', fullHerbs), true);
+  assert.equal(FIELD_ENTITY_LIMITS.herb, 10);
+  assert.equal(FIELD_ENTITY_LIMITS.berry, 1);
+  assert.equal(FIELD_ENTITY_LIMITS.event_injured, 1);
   assert.equal(canSpawnEntityKind('herb', fullHerbs.slice(1)), true);
   assert.equal(FIELD_ENTITY_LIMITS.event_fox_shrine, 1);
 });
@@ -378,4 +389,47 @@ test('the endless world repeats the river and recycles distant entities', () => 
     assert.equal(isBeyondDespawnRange(-5000, 9000, point.x, point.y, view), false);
   }
   assert.equal(isBeyondDespawnRange(0, 0, 5000, 0, view), true);
+});
+
+test('armor enhancement raises defense, max HP and its own cost', () => {
+  const stats = { ...createInitialStats(), gold: 1000, hp: 50 };
+  const result = attemptEnhance(stats, createInitialInventory(), 'armor', () => 0);
+  assert.equal(result.stats.armorLevel, 1);
+  assert.equal(result.stats.maxHp, 110);
+  assert.equal(result.stats.hp, 55);
+  assert.ok(Math.abs(getDefense(result.stats) - 11) < 1e-9);
+  assert.equal(getEnhanceCost(result.stats, 'armor'), 66);
+  assert.equal(getEnhanceCost(result.stats, 'weapon'), 60);
+  assert.ok(mitigateDamage(result.stats, 10) < mitigateDamage(stats, 10));
+});
+
+test('accessory enhancement is always 1% and raises coin gain', () => {
+  for (const level of [0, 5, 30]) assert.equal(getEquipmentEnhancePool('accessory', level)[0].per, 0.01);
+  const stats = { ...createInitialStats(), gold: 1000 };
+  const fail = attemptEnhance(stats, createInitialInventory(), 'accessory', () => 0.02);
+  assert.equal(fail.stats.accessoryLevel, 0);
+  assert.equal(fail.stats.gold, 940);
+  const success = attemptEnhance(stats, createInitialInventory(), 'accessory', () => 0.005);
+  assert.equal(success.stats.accessoryLevel, 1);
+  assert.ok(Math.abs(getGoldMultiplier(success.stats) - 1.1) < 1e-9);
+  assert.equal(getEnhanceCost(success.stats, 'accessory'), 66);
+});
+
+test('options are imprinted per equipment, multiply together and do not drift', () => {
+  const options = [{ id: 'max_hp' as const, multiplier: 1.17 }];
+  let stats = applyAbilities(createInitialStats(), options, 'weapon');
+  stats = applyAbilities(stats, options, 'armor');
+  assert.ok(Math.abs(getAbilityMultiplier(stats, 'max_hp') - 1.3689) < 1e-9);
+  assert.equal(stats.abilities?.length, 1);
+  for (let i = 0; i < 20; i++) stats = applyAbilities(applyAbilities(stats, [], 'armor'), options, 'armor');
+  stats = applyAbilities(applyAbilities(stats, [], 'armor'), [], 'weapon');
+  assert.ok(Math.abs(stats.maxHp - 100) < 0.01);
+});
+
+test('ten good deeds exchange for one jewel', () => {
+  const inventory = createInitialInventory();
+  assert.equal(exchangeGoodDeeds({ ...createInitialStats(), goodDeeds: 9 }, inventory).code, 'insufficient');
+  const result = exchangeGoodDeeds({ ...createInitialStats(), goodDeeds: 12 }, inventory);
+  assert.equal(result.stats.goodDeeds, 2);
+  assert.equal(result.inventory.jewels, 1);
 });

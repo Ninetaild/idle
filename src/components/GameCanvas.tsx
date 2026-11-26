@@ -14,6 +14,9 @@ import {
   selectAutoOrPriorityTarget,
   canSpawnEntityKind,
   MAX_FIELD_ENTITY_TOTAL,
+  INITIAL_FIELD_ENTITY_COUNT,
+  getGoldMultiplier,
+  mitigateDamage,
   scaleReward,
   getSkillMultiplier,
   shouldInteractWithBerry,
@@ -417,7 +420,7 @@ function seedFieldEntities(
     createEventByCode(at(-155, -80), 3), // Lost Fox
     createEventByCode(at(190, -125), 4), // Ancient Stone
   ];
-  for (let i = 0; i < 40 && seeded.length < 12; i++) {
+  for (let i = 0; i < 120 && seeded.length < INITIAL_FIELD_ENTITY_COUNT; i++) {
     const ent = spawnRandomFieldEntity(startX, startY, fieldId, seeded, difficultyLevel, view, false);
     if (ent) seeded.push(ent);
   }
@@ -746,7 +749,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           fairy_sylph: 18,
           event_bandit: 26,
         };
-        const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getAbilityMultiplier(sim.stats, 'gold_gain') * currentRewardMultiplier());
+        const goldDrop = Math.round((goldTable[ent.kind] ?? 18) * getGoldMultiplier(sim.stats) * currentRewardMultiplier());
         sim.stats.gold += goldDrop;
         if (ent.isHostile && ent.isElite) {
           const tokens = scaleReward(1, currentRewardMultiplier());
@@ -788,7 +791,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const p = sim.player;
       if (p.invulnTimer > 0 || propsRef.current.screenState !== 'playing') return;
 
-      sim.stats.hp = Math.max(0, sim.stats.hp - dmg);
+      sim.stats.hp = Math.max(0, sim.stats.hp - mitigateDamage(sim.stats, dmg));
       p.invulnTimer = 0.7;
       p.hitFlashTimer = 0.18;
       p.action = 'hurt';
@@ -1204,7 +1207,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         sim.spawnTimer -= dt;
         if (sim.spawnTimer <= 0 && aliveCount < MAX_FIELD_ENTITY_TOTAL) {
           // Refill quickly while the surroundings are sparse (e.g. while walking).
-          sim.spawnTimer = aliveCount < 10 ? 0.8 : 2.4;
+          sim.spawnTimer = aliveCount < INITIAL_FIELD_ENTITY_COUNT ? 0.8 : 2.4;
           const spawned = spawnRandomFieldEntity(p.x, p.y, curField, sim.entities, getFieldDifficulty(sim.stats, curField), view, true);
           if (spawned) sim.entities.push(spawned);
         }

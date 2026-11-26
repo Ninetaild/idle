@@ -10,7 +10,10 @@ import { PauseModal } from './components/PauseModal';
 import { TitleScreen } from './components/TitleScreen';
 import { VillageModals } from './components/VillageModals';
 import {
-  attemptEnhanceCharm,
+  attemptEnhance,
+  exchangeGoodDeeds,
+  getEquipmentAbilities,
+  EQUIPMENT_LABELS,
   imbueCharm,
   applyAbilities,
   formatAbilities,
@@ -29,6 +32,7 @@ import { soundEngine } from './game/sound';
 import { decryptSave, encryptSave } from './game/saveCodec';
 import type {
   AbilityRoll,
+  EquipmentId,
   FieldId,
   GameScreenState,
   GameSnapshot,
@@ -103,7 +107,7 @@ export default function App() {
   const [stationResultText, setStationResultText] = useState<string | null>(null);
 
   // Not persisted: closing the window or reloading keeps the previous options.
-  const [pendingAbilities, setPendingAbilities] = useState<AbilityRoll[] | null>(null);
+  const [pendingAbilities, setPendingAbilities] = useState<{ equipment: EquipmentId; abilities: AbilityRoll[] } | null>(null);
   useEffect(() => {
     setPendingAbilities(null);
   }, [activeStation]);
@@ -288,8 +292,8 @@ export default function App() {
     if (outcome.code === 1) soundEngine.playCoin();
   };
 
-  const handleEnhanceCharm = () => {
-    const outcome = attemptEnhanceCharm(stats, inventory);
+  const handleEnhance = (equipment: EquipmentId) => {
+    const outcome = attemptEnhance(stats, inventory, equipment);
     setStats(outcome.stats);
     setInventory(outcome.inventory);
     engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
@@ -299,27 +303,35 @@ export default function App() {
     else soundEngine.playPickup();
   };
 
-  const commitAbilities = (baseStats: PlayerStats, nextInventory: Inventory, abilities: AbilityRoll[]) => {
-    const nextStats = applyAbilities(baseStats, abilities);
-    const message = `옵션 적용: ${formatAbilities(abilities)}`;
+  const handleExchangeGoodDeeds = () => {
+    const outcome = exchangeGoodDeeds(stats, inventory);
+    setStats(outcome.stats); setInventory(outcome.inventory);
+    engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
+    setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
+    if (outcome.code === 'exchanged') soundEngine.playCoin();
+  };
+
+  const commitAbilities = (baseStats: PlayerStats, nextInventory: Inventory, equipment: EquipmentId, abilities: AbilityRoll[]) => {
+    const nextStats = applyAbilities(baseStats, abilities, equipment);
+    const message = `${EQUIPMENT_LABELS[equipment]} 옵션 적용: ${formatAbilities(abilities)}`;
     setStats(nextStats); setInventory(nextInventory);
     engineRef.current?.syncExternalState(nextStats, nextInventory);
     setPendingAbilities(null);
     setStationResultText(message); pushLog(message, 'positive');
   };
 
-  const handleImbueCharm = () => {
+  const handleImbue = (equipment: EquipmentId) => {
     if (pendingAbilities) return;
     const outcome = imbueCharm(stats, inventory);
     if (outcome.candidate) soundEngine.playElixir();
     // With nothing to revert to, the first imprint applies immediately.
-    if (outcome.candidate && !stats.abilities?.length) {
-      commitAbilities(outcome.stats, outcome.inventory, outcome.candidate);
+    if (outcome.candidate && getEquipmentAbilities(stats, equipment).length === 0) {
+      commitAbilities(outcome.stats, outcome.inventory, equipment, outcome.candidate);
       return;
     }
     setInventory(outcome.inventory);
     engineRef.current?.syncExternalState(outcome.stats, outcome.inventory);
-    setPendingAbilities(outcome.candidate);
+    setPendingAbilities(outcome.candidate ? { equipment, abilities: outcome.candidate } : null);
     setStationResultText(outcome.message); pushLog(outcome.message, outcome.tone);
   };
 
@@ -330,7 +342,7 @@ export default function App() {
   };
 
   const handleAcceptAbilities = () => {
-    if (pendingAbilities) commitAbilities(stats, inventory, pendingAbilities);
+    if (pendingAbilities) commitAbilities(stats, inventory, pendingAbilities.equipment, pendingAbilities.abilities);
   };
 
   const handleConvertSkill = () => {
@@ -485,8 +497,9 @@ export default function App() {
         onCraftBatch={handleCraftBatch}
         onSellItem={handleSellItem}
         onSellHerbs={handleSellHerbs}
-        onEnhanceCharm={handleEnhanceCharm}
-        onImbueCharm={handleImbueCharm}
+        onEnhance={handleEnhance}
+        onImbue={handleImbue}
+        onExchangeGoodDeeds={handleExchangeGoodDeeds}
         onConvertSkill={handleConvertSkill}
         pendingAbilities={pendingAbilities}
         onKeepAbilities={handleKeepAbilities}

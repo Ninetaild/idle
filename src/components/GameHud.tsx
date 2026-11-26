@@ -10,7 +10,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { FIELD_METADATA } from '../game/logic';
+import { FIELD_METADATA, getAccessoryGoldMultiplier, getDefense } from '../game/logic';
 import type {
   FieldId,
   Inventory,
@@ -114,6 +114,9 @@ export const GameHud: React.FC<GameHudProps> = ({
             <span>
               부적 +{stats.enhanceLevel} ({Math.round(stats.attackPower)})
             </span>
+          </div>
+          <div className="mt-0.5 text-[11px] md:text-xs text-[#e6d5b8] font-mono-num whitespace-nowrap">
+            방어구 +{stats.armorLevel ?? 0} ({Math.round(getDefense(stats))}) · 장신구 +{stats.accessoryLevel ?? 0} (×{getAccessoryGoldMultiplier(stats).toFixed(2)})
           </div>
         </div>
 
