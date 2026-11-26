@@ -103,6 +103,12 @@ export const ANCIENT_STONE_TABLE: readonly WeightedEntry<1 | 2 | 3>[] = [
 /**
  * Expanded Yokai & Fairy Species Table (도깨비, 숲의 요정, 구미호, 텐구, 갓파, 설녀)
  */
+/** Enemy-only elite roll: field props and peaceful encounters never use this table. */
+export const ELITE_ENEMY_TABLE: readonly WeightedEntry<'normal' | 'elite'>[] = [
+  { code: 'normal', text: '일반 적', per: 0.9 },
+  { code: 'elite', text: '강적', per: 0.1 },
+];
+
 export const YOKAI_SPECIES_TABLE: readonly WeightedEntry<1 | 2 | 3 | 4 | 5 | 6>[] = [
   { code: 1, text: '붉은 도깨비가 쇠방망이를 들고 나타났다!', per: 0.22 },
   { code: 2, text: '장난기 어린 숲의 요정이 날아다닌다.', per: 0.2 },
