@@ -4,6 +4,7 @@ import {
   ALCHEMY_TABLE,
   ANCIENT_STONE_TABLE,
   BERRY_EFFECT_TABLE,
+  ELITE_ENEMY_TABLE,
   FIELD_EVENT_TABLE,
   FIELD_SPAWN_TABLE,
   getEnhancePool,
@@ -312,4 +313,12 @@ test('equipped skills roll within the correct damage range for their type', () =
     );
     assert.ok(rolled >= low && rolled <= high);
   }
+});
+
+
+test('elite appearance is rolled only by the enemy table at 10 percent', () => {
+  assert.equal(ELITE_ENEMY_TABLE.find((entry) => entry.code === 'elite')?.per, 0.1);
+  assert.equal(rollWeighted(ELITE_ENEMY_TABLE, () => 0.899999).code, 'normal');
+  assert.equal(rollWeighted(ELITE_ENEMY_TABLE, () => 0.9).code, 'elite');
+  assert.equal(ELITE_ENEMY_TABLE.reduce((sum, entry) => sum + entry.per, 0), 1);
 });
