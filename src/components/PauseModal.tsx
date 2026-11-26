@@ -99,7 +99,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
         <div className="mt-4 p-3 bg-[#140f0e] border border-[#4a3728] rounded-xs text-xs text-[#e6d5b8] space-y-1.5 leading-relaxed">
           <div className="font-bold text-[#fde68a]">모험 안내</div>
           <div>
-            · 마을: 연단 화로에서 풀을 빚고(실패·일반·상급), 상점에서 약을 팔아 부적을 강화(성공/유지/하락, 비용 1.2배)합니다.
+            · 마을: 연단 화로에서 풀을 빚고, 메뉴에서 약 판매·부적 강화·능력 부여·전투 기술 변경을 할 수 있습니다.
           </div>
           <div>
             · 필드: 상시 필드(숲·평원·강가)와 이벤트 필드(눈 쌓인 숲)에서 약초·열매·6종 요괴·5종 인연 이벤트를 만납니다.
